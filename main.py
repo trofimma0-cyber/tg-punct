@@ -1032,8 +1032,8 @@ async def on_starred_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
         await send_starred_list(query.message, user_id, is_edit=True, offset=offset)
 
 
-async def send_help(update: Update, context: ContextTypes.DEFAULT_TYPE, is_edit: bool = False):
-    """Пошаговая инструкция по подключению бота."""
+async def send_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Пошаговая инструкция по подключению бота с иллюстрацией."""
     bot = context.bot
     try:
         bot_info = await bot.get_me()
@@ -1041,17 +1041,12 @@ async def send_help(update: Update, context: ContextTypes.DEFAULT_TYPE, is_edit:
     except Exception:
         bot_username = "AI_for_commas_bot"
 
-    text = (
+    caption = (
         "📖 <b>Как подключить бота:</b>\n\n"
-        "⚡ <b>Быстрый способ (через профиль бота):</b>\n"
-        "1. Нажмите на имя/аватарку бота наверху чата.\n"
-        "2. Нажмите <b>три точки (⋮)</b> в углу ➔ <b>«Добавить в Telegram для бизнеса»</b>.\n"
-        "3. Выберите нужные чаты и нажмите сохранить.\n\n"
-        "⚙️ <b>Через Настройки профиля Telegram:</b>\n"
-        "1. Откройте <b>Настройки</b> профиля в Telegram.\n"
-        "2. Перейдите в <b>«Telegram для бизнеса»</b> (или <b>«Автоматизация чатов»</b>).\n"
-        f"3. Откройте <b>«Чат-боты»</b> и добавьте: <code>@{bot_username}</code>\n\n"
-        "<i>Готово! Бот начнёт работать в выбранных вами диалогах.</i>"
+        "1. В Telegram откройте: <b>Настройки ➔ Аккаунт</b>\n"
+        "2. Выберите <b>«Автоматизация чатов»</b>\n"
+        f"3. Подключите бота <code>@{bot_username}</code> и выберите чаты.\n\n"
+        "<i>Готово! Бот начнёт автоматически расставлять запятые в выбранных вами диалогах.</i>"
     )
 
     back_keyboard = InlineKeyboardMarkup([
@@ -1059,17 +1054,32 @@ async def send_help(update: Update, context: ContextTypes.DEFAULT_TYPE, is_edit:
         [InlineKeyboardButton("« В главное меню", callback_data="main_menu")],
     ])
 
+    chat_id = update.effective_chat.id if update.effective_chat else None
     query = update.callback_query
-    if is_edit and query and query.message:
+    if query and query.message:
         try:
-            await query.message.edit_text(text, reply_markup=back_keyboard, parse_mode="HTML")
-            return
+            await query.message.delete()
         except Exception:
             pass
 
-    msg = update.effective_message
-    if msg:
-        await msg.reply_text(text, reply_markup=back_keyboard, parse_mode="HTML")
+    if chat_id:
+        photo_path = os.path.join(os.path.dirname(__file__), "tutorial.jpg")
+        if os.path.exists(photo_path):
+            with open(photo_path, "rb") as photo:
+                await bot.send_photo(
+                    chat_id=chat_id,
+                    photo=photo,
+                    caption=caption,
+                    parse_mode="HTML",
+                    reply_markup=back_keyboard,
+                )
+        else:
+            await bot.send_message(
+                chat_id=chat_id,
+                text=caption,
+                parse_mode="HTML",
+                reply_markup=back_keyboard,
+            )
 
 
 async def send_export_menu(target, user_id: int, is_edit: bool = False, offset: int = 0):
@@ -1418,7 +1428,7 @@ async def on_callback_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.message.reply_text(text, reply_markup=kb, parse_mode="HTML")
     elif query.data == "help":
         await query.answer()
-        await send_help(update, context, is_edit=True)
+        await send_help(update, context)
     elif query.data == "main_menu":
         await query.answer()
         text = (
@@ -1427,18 +1437,30 @@ async def on_callback_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         if query.message:
             is_admin = bool(query.from_user and query.from_user.id == admin.ADMIN_ID)
-            try:
-                await query.message.edit_text(
-                    text,
+            if query.message.photo:
+                try:
+                    await query.message.delete()
+                except Exception:
+                    pass
+                await context.bot.send_message(
+                    chat_id=query.message.chat_id,
+                    text=text,
                     reply_markup=_main_menu_keyboard(is_admin=is_admin),
                     parse_mode="HTML",
                 )
-            except Exception:
-                await query.message.reply_text(
-                    text,
-                    reply_markup=_main_menu_keyboard(is_admin=is_admin),
-                    parse_mode="HTML",
-                )
+            else:
+                try:
+                    await query.message.edit_text(
+                        text,
+                        reply_markup=_main_menu_keyboard(is_admin=is_admin),
+                        parse_mode="HTML",
+                    )
+                except Exception:
+                    await query.message.reply_text(
+                        text,
+                        reply_markup=_main_menu_keyboard(is_admin=is_admin),
+                        parse_mode="HTML",
+                    )
     else:
         await query.answer()
 
