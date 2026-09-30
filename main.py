@@ -1811,7 +1811,7 @@ def main():
             async def handle_logs(request):
                 lines = list(_LOG_RECORDS)
                 body = "\n".join(lines) if lines else "Логи пока пусты (нет событий)"
-                return web.Response(text=body, content_type="text/plain; charset=utf-8")
+                return web.Response(text=body, content_type="text/plain", charset="utf-8")
 
             async def handle_debug(request):
                 conns = storage.get_all_connections()
@@ -1830,6 +1830,7 @@ def main():
                     "timestamp": datetime.now(timezone.utc).isoformat(),
                     "connections": conns,
                     "recent_messages": recent_msgs,
+                    "logs": list(_LOG_RECORDS)[-50:],
                 })
 
             web_app = web.Application()
