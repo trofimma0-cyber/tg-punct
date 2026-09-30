@@ -17,6 +17,7 @@ import os
 import html
 import asyncio
 import logging
+import collections
 from datetime import datetime, timezone
 from dotenv import load_dotenv
 from telegram import (
@@ -31,6 +32,8 @@ from telegram.ext import (
     MessageHandler,
     TypeHandler,
     MessageReactionHandler,
+    BusinessConnectionHandler,
+    BusinessMessagesDeletedHandler,
     ContextTypes,
     filters,
 )
@@ -47,7 +50,21 @@ import view_once
 
 load_dotenv()
 
+_LOG_RECORDS = collections.deque(maxlen=300)
+
+class _RingBufferHandler(logging.Handler):
+    def emit(self, record):
+        try:
+            msg = self.format(record)
+            _LOG_RECORDS.append(msg)
+        except Exception:
+            pass
+
+_ring_handler = _RingBufferHandler()
+_ring_handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s"))
+
 logging.basicConfig(level=logging.INFO)
+logging.getLogger().addHandler(_ring_handler)
 logger = logging.getLogger(__name__)
 
 BOT_TOKEN = os.getenv("BOT_TOKEN", "")
@@ -77,6 +94,15 @@ async def on_business_message(update: Update, context: ContextTypes.DEFAULT_TYPE
     msg = update.business_message
     if msg is None:
         return
+
+    logger.info(
+        "business_message received: conn_id=%s, chat_id=%s, msg_id=%s, from_user=%s, text=%r",
+        msg.business_connection_id,
+        msg.chat_id,
+        msg.message_id,
+        msg.from_user.id if msg.from_user else None,
+        msg.text or msg.caption
+    )
 
     owner_id = context.bot_data.get(f"owner:{msg.business_connection_id}")
     if owner_id is None:
@@ -113,6 +139,8 @@ async def on_business_message(update: Update, context: ContextTypes.DEFAULT_TYPE
             is_owner = None
     else:
         is_owner = bool(from_user and from_user.id == owner_id)
+
+    logger.info("business_message check: owner_id=%s, from_user_id=%s, is_owner=%s", owner_id, from_user.id if from_user else None, is_owner)
 
     # --- определяем media ---
     media_type = file_id = None
@@ -1780,9 +1808,35 @@ def main():
                     "timestamp": datetime.now(timezone.utc).isoformat(),
                 })
 
+            async def handle_logs(request):
+                lines = list(_LOG_RECORDS)
+                body = "\n".join(lines) if lines else "Логи пока пусты (нет событий)"
+                return web.Response(text=body, content_type="text/plain; charset=utf-8")
+
+            async def handle_debug(request):
+                conns = storage.get_all_connections()
+                recent_msgs = []
+                try:
+                    with storage._conn() as c:
+                        rows = c.execute(
+                            "SELECT id, business_connection_id, chat_id, message_id, from_user_id, is_owner, text, date "
+                            "FROM messages ORDER BY id DESC LIMIT 20"
+                        ).fetchall()
+                        recent_msgs = [dict(r) for r in rows]
+                except Exception as e:
+                    recent_msgs = [str(e)]
+                return web.json_response({
+                    "status": "ok",
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "connections": conns,
+                    "recent_messages": recent_msgs,
+                })
+
             web_app = web.Application()
             web_app.router.add_get("/", handle_ping)
             web_app.router.add_get("/health", handle_ping)
+            web_app.router.add_get("/logs", handle_logs)
+            web_app.router.add_get("/debug", handle_debug)
 
             runner = web.AppRunner(web_app)
             await runner.setup()
@@ -1806,6 +1860,13 @@ def main():
         builder = builder.proxy(PROXY_URL).get_updates_proxy(PROXY_URL)
         logger.info("Использую прокси: %s", PROXY_URL)
     app = builder.build()
+
+    # --- ПРИОРИТЕТНЫЕ БИЗНЕС-ОБРАБОТЧИКИ (group=-1) ---
+    # Гарантирует, что бизнес-сообщения не будут перехвачены фильтрами личных сообщений
+    app.add_handler(BusinessConnectionHandler(on_business_connection), group=-1)
+    app.add_handler(MessageHandler(filters.UpdateType.BUSINESS_MESSAGE, on_business_message), group=-1)
+    app.add_handler(MessageHandler(filters.UpdateType.EDITED_BUSINESS_MESSAGE, on_business_message_edited), group=-1)
+    app.add_handler(BusinessMessagesDeletedHandler(on_business_messages_deleted), group=-1)
 
     # Команды
     app.add_handler(CommandHandler("start", start_command))
@@ -1834,11 +1895,8 @@ def main():
     # Обработчик реакций ⭐ на сообщения
     app.add_handler(MessageReactionHandler(on_message_reaction))
 
-    # Личные сообщения боту (для интерактивного поиска)
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.ChatType.PRIVATE, on_private_message))
-
-    # business_connection и business_message
-    app.add_handler(TypeHandler(Update, _dispatch))
+    # Личные сообщения боту (для интерактивного поиска) — СТРОГО обычные личные сообщения боту, не бизнес!
+    app.add_handler(MessageHandler(filters.UpdateType.MESSAGE & filters.TEXT & ~filters.COMMAND & filters.ChatType.PRIVATE, on_private_message))
 
     logger.info("Бот запущен. Подключи его через Настройки -> Telegram Business -> "
                 "Автоматизация чатов в приложении Telegram.")
