@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+
+# Configuration & Secrets
+.env
+
+# Database & SQLite artifacts
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Runtime media cache & temp files
+cached_media/
+*.tmp
+*.log
+
+# Temporary dumps & scratch
+scratch/
+h1_*
+*.html
+*.jsonl
+
+# IDE & OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

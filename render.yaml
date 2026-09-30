@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: tg-punct-bot
+    runtime: python
+    plan: free
+    region: frankfurt
+    buildCommand: pip install -r requirements.txt
+    startCommand: python main.py
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: BOT_TOKEN
+        sync: false
+      - key: ADMIN_ID
+        sync: false
+      - key: DEFAULT_PUNCT
+        value: "0"
+      - key: DEFAULT_CAPS
+        value: "0"
+      - key: DEFAULT_TYPOGRAPHY
+        value: "0"
+      - key: DEFAULT_YO
+        value: "0"
