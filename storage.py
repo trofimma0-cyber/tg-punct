@@ -979,4 +979,29 @@ def get_recent_cached_media(limit: int = 15) -> list[dict]:
         return [dict(r) for r in rows]
 
 
-
+def get_last_chat_message(business_connection_id: str, chat_id: int, exclude_message_id: int = None) -> dict | None:
+    """Возвращает последнее предшествующее сообщение в этом диалоге для контекста."""
+    with _conn() as c:
+        if exclude_message_id:
+            row = c.execute(
+                """
+                SELECT message_id, from_user_id, from_user_name, is_owner, text, date
+                FROM messages
+                WHERE business_connection_id = ? AND chat_id = ? AND message_id != ? AND text IS NOT NULL AND text != ''
+                ORDER BY id DESC
+                LIMIT 1
+                """,
+                (business_connection_id, chat_id, exclude_message_id)
+            ).fetchone()
+        else:
+            row = c.execute(
+                """
+                SELECT message_id, from_user_id, from_user_name, is_owner, text, date
+                FROM messages
+                WHERE business_connection_id = ? AND chat_id = ? AND text IS NOT NULL AND text != ''
+                ORDER BY id DESC
+                LIMIT 1
+                """,
+                (business_connection_id, chat_id)
+            ).fetchone()
+        return dict(row) if row else None

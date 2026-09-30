@@ -356,10 +356,16 @@ async def on_business_message(update: Update, context: ContextTypes.DEFAULT_TYPE
 
     _processing_ids.add(key)
     try:
+        prev_msg = storage.get_last_chat_message(msg.business_connection_id, msg.chat_id, exclude_message_id=msg.message_id)
+        context_info = {
+            "prev_text": prev_msg.get("text") if prev_msg else None,
+            "prev_is_owner": prev_msg.get("is_owner") if prev_msg else None,
+        } if prev_msg else None
+
         loop = asyncio.get_running_loop()
         async with _model_lock:
             fixed = await asyncio.wait_for(
-                loop.run_in_executor(None, fix_punctuation, original, settings),
+                loop.run_in_executor(None, fix_punctuation, original, settings, context_info),
                 timeout=5.0
             )
         if fixed and fixed != msg.text:

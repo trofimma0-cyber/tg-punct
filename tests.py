@@ -311,7 +311,30 @@ live_msg2 = punct.fix_punctuation("Ало черт привет родной", s
 assert live_msg2 != "Ало черт привет родной", f"Default settings failed to punctuate: {live_msg2}"
 assert "Ало," in live_msg2
 
-print(" -> punct.py: Все 13 ИИ-тестов пройдены успешно!")
+# Новые тесты: неформальное общение, отсутствие точки в конце, вопросы и контекст
+res_voc = punct.fix_punctuation("Дарова лох", storage.DEFAULT_SETTINGS)
+assert res_voc == "Дарова, лох", f"Expected 'Дарова, лох', got: {res_voc}"
+
+res_nodot = punct.fix_punctuation("я дома отдыхаю", storage.DEFAULT_SETTINGS)
+assert not res_nodot.endswith("."), f"Message should not end with period: {res_nodot}"
+assert res_nodot == "Я дома отдыхаю"
+
+res_q = punct.fix_punctuation("ты пойдешь гулять", storage.DEFAULT_SETTINGS)
+assert res_q.endswith("?"), f"Question should end with '?', got: {res_q}"
+
+res_q2 = punct.fix_punctuation("че делаешь", storage.DEFAULT_SETTINGS)
+assert res_q2.endswith("?"), f"Question should end with '?', got: {res_q2}"
+
+# Контекст диалога: ответ на вопрос не превращается в вопрос
+ctx_question = {"prev_text": "Ты где сейчас?", "prev_is_owner": False}
+res_ans = punct.fix_punctuation("дома", storage.DEFAULT_SETTINGS, context_info=ctx_question)
+assert res_ans == "Дома" and not res_ans.endswith("?"), f"Answer should not be a question: {res_ans}"
+
+# Хранилище: get_last_chat_message
+last_msg = storage.get_last_chat_message("test_conn_audit", 88888)
+assert last_msg is not None
+
+print(" -> punct.py: Все 18 ИИ-тестов пройдены успешно!")
 
 # ----------------------------------------------------
 # 8. ТЕСТИРОВАНИЕ АДМИНКИ И САНИТАЙЗЕРА (admin.py)

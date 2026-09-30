@@ -63,6 +63,105 @@ _YO_RE = re.compile(r'\b(' + '|'.join(map(re.escape, COMMON_YO_MAP.keys())) + r'
 _DIGIT_WORDS = ["ноль", "один", "два", "три", "четыре", "пять", "шесть", "семь", "восемь", "девять", "десять"]
 _PROT_PATTERN = re.compile(r"(`[^`]+`|https?://\S+|t\.me/\S+|@\w+|#\w+)")
 
+# Неформальные дефисные частицы в разговорной речи (-то, -ка, -таки)
+HYPHEN_RE = re.compile(
+    r'\b(сам|как|где|кто|что|че|чё|чо|так|куда|откуда|почему|зачем|когда|он|она|они|мы|вы|ты|я|щас|сейчас|всё|все|да|нет|тот|та|те)\s+(то)\b',
+    re.IGNORECASE
+)
+HYPHEN_KA_RE = re.compile(
+    r'\b(давай|глянь|погоди|стой|постой|на|ну|гляди|посмотри|послушай|скажи)\s+(ка)\b',
+    re.IGNORECASE
+)
+HYPHEN_TAKI_RE = re.compile(
+    r'\b(все|всё|так|опять|снова)\s+(таки)\b',
+    re.IGNORECASE
+)
+
+# Разговорные приветствия и обращения (чтобы не было 'Дарова. Лох.')
+GREETINGS = [
+    'дарова', 'здарова', 'здорово', 'привет', 'приветик', 'хай', 'салам', 'хеллоу', 'ку', 'йоу', 'ало', 'алло',
+    'добрый день', 'добрый вечер', 'доброе утро'
+]
+VOCATIVES = [
+    'друг', 'друзья', 'брат', 'бро', 'чувак', 'чел', 'братан', 'братишка', 'кореш', 'родной', 'лох',
+    'малой', 'дядя', 'пацаны', 'пацан', 'ребята', 'красотка', 'шеф', 'мужики', 'босс', 'народ'
+]
+GREETING_VOC_RE = re.compile(
+    r'\b(' + '|'.join(GREETINGS) + r')[\.,!\s]+(' + '|'.join(VOCATIVES) + r')\b',
+    re.IGNORECASE
+)
+
+# Интеллектуальный детектор вопросов для неформального общения
+QUESTION_WORDS = {
+    'кто', 'что', 'че', 'чё', 'чо', 'кого', 'кому', 'кем', 'ком',
+    'где', 'куда', 'откуда', 'когда',
+    'как', 'почему', 'зачем', 'отчего',
+    'какой', 'какая', 'какое', 'какие', 'какого', 'какому', 'каким', 'каких',
+    'чей', 'чья', 'чьё', 'чье', 'чьи',
+    'сколько', 'скольких', 'скольким', 'почём', 'почем', 'насколько'
+}
+QUESTION_VERBS = {
+    'пойдешь', 'пойдёшь', 'поедешь', 'хочешь', 'будешь', 'можешь', 'знаешь',
+    'помнишь', 'видел', 'слышал', 'думаешь', 'скинешь', 'поможешь', 'подскажешь',
+    'успеешь', 'придешь', 'придёшь', 'сможешь', 'пойдете', 'пойдёте', 'поедете',
+    'хотите', 'будете', 'можете', 'знаете', 'помните', 'видели', 'слышали',
+    'думаете', 'скинете', 'поможете', 'подскажете', 'успеете', 'придете',
+    'придёте', 'сможете', 'пойдем', 'пойдём', 'поедем', 'будем', 'погнали'
+}
+QUESTION_STATES = {
+    'свободен', 'свободна', 'свободны', 'занят', 'занята', 'заняты', 'дома',
+    'готов', 'готова', 'готовы', 'живой', 'жив', 'спишь'
+}
+SHORT_QUESTIONS = {
+    'правда', 'серьезно', 'серьёзно', 'точно', 'уверен', 'уверена', 'реально',
+    'можно', 'куда', 'где', 'когда', 'зачем', 'почему', 'кто', 'что', 'че',
+    'чё', 'чо', 'а ты', 'а вы', 'а он', 'а она', 'а мы', 'а они', 'в смысле', 'всмысле'
+}
+
+def is_sentence_question(s: str, context_info: dict = None) -> bool:
+    s_clean = re.sub(r'[\.,!\?:;]+', '', s).strip().lower()
+    if not s_clean:
+        return False
+    words = s_clean.split()
+    if not words:
+        return False
+
+    prev_text = context_info.get("prev_text") if context_info else None
+    prev_is_q = bool(prev_text and ("?" in prev_text or is_sentence_question(prev_text)))
+
+    # Если собеседник только что задал вопрос, то одиночный ответ (дома, норм) — не вопрос
+    if prev_is_q:
+        if s_clean in {'дома', 'норм', 'нормально', 'да', 'нет', 'хорошо', 'ладно', 'лан', 'хз', 'не знаю', 'еду', 'сплю', 'работаю', 'занят', 'свободен'}:
+            return False
+
+    if s_clean in SHORT_QUESTIONS:
+        return True
+    if 'ли' in words or 'ль' in words:
+        return True
+    if re.search(r',\s*(да|нет|правда|верно|так|ок|окей)\b', s, re.IGNORECASE):
+        return True
+
+    skip_prefixes = {'слушай', 'скажи', 'глянь', 'прикинь', 'короче', 'кстати', 'привет', 'дарова', 'здарова', 'здорово', 'хай', 'салам', 'ало', 'алло', 'ну', 'а'}
+    start_idx = 0
+    while start_idx < len(words) and words[start_idx] in skip_prefixes:
+        start_idx += 1
+    check_words = words[start_idx:] if start_idx < len(words) else words
+    if not check_words:
+        return False
+
+    if check_words[0] in QUESTION_WORDS:
+        return True
+    if 'как' in check_words and ('сам' in check_words or 'дела' in check_words or 'ты' in check_words or 'вы' in check_words):
+        return True
+    if len(check_words) >= 2 and check_words[0] in {'ты', 'вы'} and check_words[1] in QUESTION_WORDS:
+        return True
+    if check_words[0] in QUESTION_VERBS or check_words[0] in QUESTION_STATES:
+        return True
+    if len(check_words) >= 2 and check_words[0] in {'ты', 'вы', 'мы'} and (check_words[1] in QUESTION_VERBS or check_words[1] in QUESTION_STATES):
+        return True
+    return False
+
+
 
 def apply_text_transforms(text: str, settings: dict = None) -> str:
     if not text or not settings:
@@ -205,22 +304,32 @@ def warmup():
         print(f"[punct] ошибка прогрева: {e}")
 
 
-def _fix_single_line(line: str, settings: dict) -> str:
+def _fix_single_line(line: str, settings: dict, context_info: dict = None) -> str:
     stripped = line.strip()
     if not stripped:
         return line
 
     # Быстрый фильтр: если нет русских букв — не тратим ресурсы на нейросеть
     if not re.search(r"[а-яёА-ЯЁ]", stripped):
-        return apply_text_transforms(line, settings)
+        res = apply_text_transforms(line, settings)
+        if res.endswith(".") and not res.endswith("..."):
+            res = res[:-1].rstrip()
+        return res
 
-    # Быстрый фильтр: одиночное русское слово («да», «нет», «хорошо», «привет»)
+    # Быстрый фильтр: одиночное русское слово («да», «нет», «хорошо», «привет», «правда»)
     words = stripped.split()
     if len(words) == 1 and re.match(r"^[а-яёА-ЯЁ]+$", words[0]):
         w = words[0]
         if settings.get("caps", 1):
             w = w[0].upper() + w[1:]
+        if is_sentence_question(words[0], context_info):
+            w = w + "?"
         return apply_text_transforms(w, settings)
+
+    # Дефисные частицы в неформальной речи (-то, -ка, -таки)
+    stripped = HYPHEN_RE.sub(r'\1-\2', stripped)
+    stripped = HYPHEN_KA_RE.sub(r'\1-\2', stripped)
+    stripped = HYPHEN_TAKI_RE.sub(r'\1-\2', stripped)
 
     # Защита спец-элементов (ссылки, юзернеймы, хештеги, моноширинный код)
     placeholders = {}
@@ -242,7 +351,10 @@ def _fix_single_line(line: str, settings: dict) -> str:
         classifier = _get_classifier()
         preds = classifier(cleaned_for_model)
         if not preds:
-            return apply_text_transforms(line, settings)
+            res = apply_text_transforms(line, settings)
+            if res.endswith(".") and not res.endswith("..."):
+                res = res[:-1].rstrip()
+            return res
 
         parts = []
         for item in preds:
@@ -254,7 +366,10 @@ def _fix_single_line(line: str, settings: dict) -> str:
         res = " ".join(parts).strip()
     except Exception as e:
         print(f"[punct] ошибка модели: {e}")
-        return apply_text_transforms(line, settings)
+        res = apply_text_transforms(line, settings)
+        if res.endswith(".") and not res.endswith("..."):
+            res = res[:-1].rstrip()
+        return res
 
     # Восстанавливаем защищённые элементы
     for tag, val in placeholders.items():
@@ -266,18 +381,41 @@ def _fix_single_line(line: str, settings: dict) -> str:
     res = re.sub(r"!{2,}", "!", res)
     res = re.sub(r"\.{4,}", "...", res)
 
+    # Приветствие + обращение ('Дарова. Лох.' -> 'Дарова, лох')
+    res = GREETING_VOC_RE.sub(lambda m: f"{m.group(1).capitalize()}, {m.group(2).lower()}", res)
+
+    # Восстановление дефисов после модели ('сам, то' -> 'сам-то')
+    res = re.sub(r'\b(сам|как|где|кто|что|че|чё|чо|так|куда|откуда|почему|зачем|когда|он|она|они|мы|вы|ты|я|щас|сейчас|всё|все|да|нет),?\s+то\b', r'\1-то', res, flags=re.IGNORECASE)
+    res = re.sub(r'\b(давай|глянь|погоди|стой|постой|на|ну|гляди|посмотри|послушай|скажи),?\s+ка\b', r'\1-ка', res, flags=re.IGNORECASE)
+    res = re.sub(r'\b(все|всё|так|опять|снова),?\s+таки\b', r'\1-таки', res, flags=re.IGNORECASE)
+
+    # Разговорные вводные в начале строки
+    res = re.sub(r'^(короче|кстати|в общем|впрочем|прикинь)\s+(?=[а-яёА-ЯЁ])', r'\1, ', res, flags=re.IGNORECASE)
+
     # Исправляем регистр предложений
     if settings.get("caps", 1):
         if len(res) > 0 and res[0].islower():
             res = res[0].upper() + res[1:]
         res = re.sub(r"([\.!\?]\s+)([а-яё])", lambda m: m.group(1) + m.group(2).upper(), res)
 
+    # Интеллектуальный вопрос: если фраза — вопрос, ставим '?' вместо '.' или '!'
+    if is_sentence_question(stripped, context_info):
+        if res.endswith((".", "!")):
+            res = res[:-1].rstrip() + "?"
+        elif not res.endswith(("?", "...", "?!")):
+            res = res.rstrip() + "?"
+
+    # Убираем точку в конце сообщения (по запросу: не ставить в конце точку!)
+    if res.endswith(".") and not res.endswith("..."):
+        res = res[:-1].rstrip()
+
     return apply_text_transforms(res, settings)
 
 
-def fix_punctuation(text: str, settings: dict = None) -> str:
+def fix_punctuation(text: str, settings: dict = None, context_info: dict = None) -> str:
     """Возвращает текст с расставленными знаками препинания и регистром.
     Бережно сохраняет переносы строк, ссылки, юзернеймы и разметку.
+    Не ставит точку в самом конце сообщения в неформальном общении.
     """
     if not text:
         return text
@@ -286,20 +424,27 @@ def fix_punctuation(text: str, settings: dict = None) -> str:
     if not settings.get("enabled", 1):
         return text
 
-    # Если знаки препинания выключены пользователем, не вызываем нейросеть
-    # и не трогаем запятые/точки, сохраняя авторский текст
+    # Если знаки препинания выключены пользователем
     if not settings.get("punct", 1):
         res = text
         if settings.get("caps", 1):
             if len(res) > 0 and res[0].islower():
                 res = res[0].upper() + res[1:]
             res = re.sub(r"([\.!\?]\s+)([а-яёА-ЯЁ])", lambda m: m.group(1) + m.group(2).upper(), res)
+        if res.endswith(".") and not res.endswith("..."):
+            res = res[:-1].rstrip()
         return apply_text_transforms(res, settings)
 
     # Обработка многострочного текста с сохранением абзацев
     if "\n" in text:
         lines = text.split("\n")
-        fixed_lines = [_fix_single_line(l, settings) for l in lines]
-        return "\n".join(fixed_lines)
+        fixed_lines = [_fix_single_line(l, settings, context_info) for l in lines]
+        res = "\n".join(fixed_lines)
+    else:
+        res = _fix_single_line(text, settings, context_info)
 
-    return _fix_single_line(text, settings)
+    # Финальная гарантия: никакого периода в самом конце сообщения
+    if res.endswith(".") and not res.endswith("..."):
+        res = res[:-1].rstrip()
+
+    return res
