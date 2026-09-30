@@ -1884,9 +1884,22 @@ def main():
         except Exception as e:
             logger.warning("Не удалось запустить keep-alive web-сервер: %s", e)
 
+    async def keep_alive_pinger():
+        """Периодически пингует внешний адрес сервиса на Render, чтобы контейнер не засыпал."""
+        render_url = os.getenv("RENDER_EXTERNAL_URL", "https://tg-punct-bot.onrender.com").rstrip("/") + "/health"
+        while True:
+            await asyncio.sleep(480)  # каждые 8 минут
+            try:
+                async with httpx.AsyncClient(timeout=15.0) as client:
+                    r = await client.get(render_url)
+                    logger.info("Keep-alive self-ping %s: %s", render_url, r.status_code)
+            except Exception as e:
+                logger.debug("Keep-alive self-ping error: %s", e)
+
     async def post_init(application: Application):
         await start_web_server()
         asyncio.create_task(reminders_worker(application))
+        asyncio.create_task(keep_alive_pinger())
         loop = asyncio.get_running_loop()
         # Фоновый прогрев ИИ-модели для мгновенного первого отклика
         loop.run_in_executor(None, punct.warmup)
