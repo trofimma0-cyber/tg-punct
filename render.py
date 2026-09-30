@@ -1,3 +1,4 @@
+import os
 import functools
 from PIL import Image, ImageDraw, ImageFont
 

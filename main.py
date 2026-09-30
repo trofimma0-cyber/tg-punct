@@ -232,16 +232,17 @@ async def on_business_message(update: Update, context: ContextTypes.DEFAULT_TYPE
             )
         )
 
-    # --- 0. Сохранение в Избранное при ответе ⭐ на сообщение ---
-    if is_owner and msg.reply_to_message and settings.get("star_save", 0):
-        clean_reply_text = (msg.text or "").strip()
-        if clean_reply_text in ("⭐", "⭐️", "!сохрани", "!избранное", "!сейв"):
+    # --- 0. Сохранение в Избранное при ответе ⭐ или !сейв на сообщение ---
+    if is_owner and msg.reply_to_message and settings.get("star_save", 1):
+        clean_reply_text = (msg.text or "").strip().lower()
+        if clean_reply_text in ("⭐", "⭐️", "!сохрани", "!избранное", "!сейв", "!фото", "!save", "!media", "сохрани", "сейв"):
             target_msg = msg.reply_to_message
             await starred.save_and_forward_starred(
                 bot=context.bot,
                 user_id=owner_id,
                 chat_id=msg.chat_id,
                 message_id=target_msg.message_id,
+                reply_msg=target_msg,
             )
             # Тихо удаляем технический ответ ⭐ из чата
             try:
@@ -255,7 +256,7 @@ async def on_business_message(update: Update, context: ContextTypes.DEFAULT_TYPE
             return
 
     # --- 1. Встречи и напоминания (работает для всех сообщений в чате) ---
-    if owner_id and settings.get("reminders", 0) and text_content:
+    if owner_id and settings.get("reminders", 1) and text_content:
         # Проверяем отказ, несогласие или отмену встречи
         if reminders.is_cancellation(text_content):
             cancelled = storage.cancel_active_reminder_for_chat(msg.chat_id, owner_id)
@@ -551,6 +552,7 @@ def _main_menu_keyboard(is_admin: bool = False):
             InlineKeyboardButton("⭐ Избранное", callback_data="starred_list"),
         ],
         [
+            InlineKeyboardButton("📸 Спасённые фото", callback_data="media_list"),
             InlineKeyboardButton("❓ Как подключить", callback_data="help"),
         ]
     ]
@@ -1014,7 +1016,7 @@ async def on_message_reaction(update: Update, context: ContextTypes.DEFAULT_TYPE
         return
 
     st = storage.get_user_settings(user.id)
-    if not st.get("star_save", 0):
+    if not st.get("star_save", 1):
         return
 
     if starred.is_star_reaction(react.new_reaction):
@@ -1136,6 +1138,123 @@ async def on_starred_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
             offset = 0
         await query.answer()
         await send_starred_list(query.message, user_id, is_edit=True, offset=offset)
+
+
+async def send_media_list(target, user_id: int, is_edit: bool = False):
+    """Отображение последних перехваченных медиафайлов от собеседников."""
+    items = storage.get_recent_cached_media(limit=10)
+    if not items:
+        text = (
+            "📸 <b>Спасённые фото и медиа пока пусты.</b>\n\n"
+            "Когда собеседник отправит вам фото, видео или сгорающее медиа в диалог, бот автоматически сохранит его здесь."
+        )
+        kb = InlineKeyboardMarkup([
+            [InlineKeyboardButton("🔄 Обновить", callback_data="media_list")],
+            [InlineKeyboardButton("« В главное меню", callback_data="main_menu")],
+        ])
+    else:
+        text = f"📸 <b>Спасённые фото и медиа ({len(items)}):</b>\n\n"
+        rows = []
+        for i, item in enumerate(items, 1):
+            dt_str = datetime.fromtimestamp(item["date"], tz=timezone.utc).astimezone().strftime("%d.%m %H:%M") if item.get("date") else ""
+            author = item.get("from_user_name") or "Собеседник"
+            chat_name = item.get("chat_title") or str(item.get("chat_id"))
+            mtype = item.get("media_type") or "медиа"
+            m_icon = "📷 Фото" if mtype == "photo" else "🎥 Видео" if mtype == "video" else "⭕ Кружок" if mtype == "video_note" else "🎤 Войс" if mtype == "voice" else "📁 Файл"
+            text += f"{i}. <b>{m_icon}</b> от {html.escape(author)} ({html.escape(chat_name)}, {dt_str})\n"
+            rows.append([InlineKeyboardButton(f"📥 Показать {m_icon} #{i}", callback_data=f"med:get:{item['id']}")])
+
+        rows.append([
+            InlineKeyboardButton("🔄 Обновить", callback_data="media_list"),
+            InlineKeyboardButton("« В главное меню", callback_data="main_menu"),
+        ])
+        kb = InlineKeyboardMarkup(rows)
+
+    if is_edit:
+        try:
+            await target.edit_text(text, reply_markup=kb, parse_mode="HTML")
+            return
+        except Exception:
+            pass
+    await target.reply_text(text, reply_markup=kb, parse_mode="HTML")
+
+
+async def media_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Команда /media или /photos для просмотра спасённых медиа."""
+    context.user_data["awaiting_search"] = False
+    user_id = update.effective_user.id if update.effective_user else 0
+    if update.message:
+        await send_media_list(update.message, user_id, is_edit=False)
+
+
+async def on_media_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Отправка конкретного сохранённого медиафайла пользователю в личку."""
+    query = update.callback_query
+    if not query:
+        return
+    await query.answer()
+    parts = (query.data or "").split(":")
+    if len(parts) < 3 or parts[1] != "get":
+        return
+    try:
+        msg_id_db = int(parts[2])
+    except ValueError:
+        return
+
+    with storage._conn() as c:
+        row = c.execute("SELECT * FROM messages WHERE id = ?", (msg_id_db,)).fetchone()
+    if not row:
+        await query.message.reply_text("❌ Медиафайл не найден в базе.")
+        return
+
+    m = dict(row)
+    media_type = m.get("media_type")
+    file_id = m.get("file_id")
+    chat_id = m.get("chat_id")
+    message_id = m.get("message_id")
+    conn_id = m.get("business_connection_id")
+
+    cached_bytes, cached_ext = view_once.get_cached_media_bytes(conn_id, chat_id, message_id)
+    caption = (
+        f"📸 <b>Спасённый файл:</b>\n"
+        f"👤 От: {html.escape(m.get('from_user_name') or 'Собеседник')}\n"
+        f"💬 Чат: {html.escape(m.get('chat_title') or str(chat_id))}"
+    )
+
+    try:
+        if media_type == "photo":
+            if cached_bytes:
+                await context.bot.send_photo(chat_id=query.from_user.id, photo=bytes(cached_bytes), caption=caption, parse_mode="HTML")
+            elif file_id:
+                await context.bot.send_photo(chat_id=query.from_user.id, photo=file_id, caption=caption, parse_mode="HTML")
+        elif media_type == "video":
+            if cached_bytes:
+                await context.bot.send_video(chat_id=query.from_user.id, video=bytes(cached_bytes), caption=caption, parse_mode="HTML")
+            elif file_id:
+                await context.bot.send_video(chat_id=query.from_user.id, video=file_id, caption=caption, parse_mode="HTML")
+        elif media_type == "video_note":
+            if cached_bytes:
+                await context.bot.send_video_note(chat_id=query.from_user.id, video_note=bytes(cached_bytes))
+            elif file_id:
+                await context.bot.send_video_note(chat_id=query.from_user.id, video_note=file_id)
+        elif media_type == "voice":
+            if cached_bytes:
+                await context.bot.send_voice(chat_id=query.from_user.id, voice=bytes(cached_bytes), caption=caption, parse_mode="HTML")
+            elif file_id:
+                await context.bot.send_voice(chat_id=query.from_user.id, voice=file_id, caption=caption, parse_mode="HTML")
+        elif media_type == "audio":
+            if cached_bytes:
+                await context.bot.send_audio(chat_id=query.from_user.id, audio=bytes(cached_bytes), caption=caption, parse_mode="HTML")
+            elif file_id:
+                await context.bot.send_audio(chat_id=query.from_user.id, audio=file_id, caption=caption, parse_mode="HTML")
+        else:
+            if cached_bytes:
+                await context.bot.send_document(chat_id=query.from_user.id, document=bytes(cached_bytes), caption=caption, parse_mode="HTML")
+            elif file_id:
+                await context.bot.send_document(chat_id=query.from_user.id, document=file_id, caption=caption, parse_mode="HTML")
+    except Exception as e:
+        logger.warning("Не удалось отправить сохранённое медиа пользователю: %s", e)
+        await query.message.reply_text(f"⚠️ Не удалось отправить файл: {e}")
 
 
 async def send_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1517,6 +1636,9 @@ async def on_callback_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif query.data == "starred_list":
         await query.answer()
         await send_starred_list(query.message, user_id, is_edit=True)
+    elif query.data == "media_list":
+        await query.answer()
+        await send_media_list(query.message, user_id, is_edit=True)
     elif query.data == "search":
         await query.answer()
         context.user_data["awaiting_search"] = True
@@ -1582,42 +1704,43 @@ async def on_business_messages_deleted(update: Update, context: ContextTypes.DEF
 
     owner_id = context.bot_data.get(f"owner:{conn_id}") or storage.get_connection_owner(conn_id)
     if not owner_id:
+        try:
+            conn_obj = await context.bot.get_business_connection(conn_id)
+            if conn_obj and conn_obj.user:
+                owner_id = conn_obj.user.id
+                storage.save_connection(conn_id, conn_obj.user.id, is_enabled=1)
+                context.bot_data[f"owner:{conn_id}"] = owner_id
+        except Exception as e:
+            logger.warning("Не удалось восстановить owner в on_business_messages_deleted: %s", e)
+    if not owner_id:
         owner_id = admin.ADMIN_ID
     if not owner_id:
         return
 
     st = storage.get_user_settings(owner_id)
-    if not st.get("anti_delete", 0):
+    if not st.get("anti_delete", 1) and not st.get("view_once_saver", 1):
         return
 
     for msg_id in del_obj.message_ids:
         msg_data = storage.get_message(conn_id, chat_id, msg_id)
-        if not msg_data:
+        cached_bytes, cached_ext = view_once.get_cached_media_bytes(conn_id, chat_id, msg_id)
+        if not msg_data and not cached_bytes:
             continue
 
-        is_owner = msg_data.get("is_owner") == 1
-        author = msg_data.get("from_user_name") or ("Вы" if is_owner else "Собеседник")
-        title = msg_data.get("chat_title") or chat_name
-        dt_str = ""
-        if msg_data.get("date"):
-            dt_str = datetime.fromtimestamp(msg_data["date"], tz=timezone.utc).astimezone().strftime("%d.%m %H:%M")
-
-        is_owner = msg_data.get("is_owner") == 1
-        author = msg_data.get("from_user_name") or ("Вы" if is_owner else "Собеседник")
-        title = msg_data.get("chat_title") or chat_name
-        dt_str = ""
-        msg_date = msg_data.get("date") or 0
-        if msg_date:
-            dt_str = datetime.fromtimestamp(msg_date, tz=timezone.utc).astimezone().strftime("%d.%m %H:%M")
+        is_owner = (msg_data.get("is_owner") == 1) if msg_data else False
+        author = (msg_data.get("from_user_name") or ("Вы" if is_owner else "Собеседник")) if msg_data else "Собеседник"
+        title = (msg_data.get("chat_title") or chat_name) if msg_data else chat_name
+        msg_date = (msg_data.get("date") or 0) if msg_data else 0
+        dt_str = datetime.fromtimestamp(msg_date, tz=timezone.utc).astimezone().strftime("%d.%m %H:%M") if msg_date else ""
 
         now_ts = int(datetime.now(timezone.utc).timestamp())
         lifetime = max(0, now_ts - msg_date) if msg_date else 9999
-        media_type = msg_data.get("media_type")
-        file_id = msg_data.get("file_id")
-        text_content = (msg_data.get("text") or "").strip()
+        media_type = msg_data.get("media_type") if msg_data else (
+            "photo" if cached_ext in ("jpg", "jpeg", "png") else "video" if cached_ext == "mp4" else "voice" if cached_ext == "ogg" else "document"
+        )
+        file_id = msg_data.get("file_id") if msg_data else None
+        text_content = (msg_data.get("text") or "").strip() if msg_data else ""
 
-        # Проверяем наличие пред-загруженного медиафайла в локальном кэше View-Once
-        cached_bytes, cached_ext = view_once.get_cached_media_bytes(conn_id, chat_id, msg_id)
         is_view_once = (not is_owner) and view_once.is_likely_view_once(lifetime) and (media_type in ("photo", "video", "video_note", "voice"))
 
         if is_view_once:
@@ -1738,6 +1861,15 @@ async def on_business_message_edited(update: Update, context: ContextTypes.DEFAU
     conn_id = msg.business_connection_id
     owner_id = context.bot_data.get(f"owner:{conn_id}") or storage.get_connection_owner(conn_id)
     if not owner_id:
+        try:
+            conn_obj = await context.bot.get_business_connection(conn_id)
+            if conn_obj and conn_obj.user:
+                owner_id = conn_obj.user.id
+                storage.save_connection(conn_id, conn_obj.user.id, is_enabled=1)
+                context.bot_data[f"owner:{conn_id}"] = owner_id
+        except Exception:
+            pass
+    if not owner_id:
         owner_id = admin.ADMIN_ID
     if not owner_id:
         return
@@ -1750,7 +1882,7 @@ async def on_business_message_edited(update: Update, context: ContextTypes.DEFAU
     storage.update_message_text(conn_id, msg.chat_id, msg.message_id, new_text)
 
     st = storage.get_user_settings(owner_id)
-    if not st.get("anti_delete", 0):
+    if not st.get("anti_delete", 1):
         return
 
     from_user = msg.from_user
@@ -1877,6 +2009,8 @@ def main():
     app.add_handler(CommandHandler("reminders", reminders_command))
     app.add_handler(CommandHandler("starred", starred_command))
     app.add_handler(CommandHandler("favorites", starred_command))
+    app.add_handler(CommandHandler("media", media_command))
+    app.add_handler(CommandHandler("photos", media_command))
     app.add_handler(CommandHandler("features", features_command))
     app.add_handler(CommandHandler("functions", features_command))
     app.add_handler(CommandHandler("help", send_help))
@@ -1891,6 +2025,7 @@ def main():
     app.add_handler(CallbackQueryHandler(on_settings_callback, pattern=r"^set:"))
     app.add_handler(CallbackQueryHandler(on_reminder_callback, pattern=r"^rem:cancel:"))
     app.add_handler(CallbackQueryHandler(on_starred_callback, pattern=r"^star:"))
+    app.add_handler(CallbackQueryHandler(on_media_callback, pattern=r"^med:"))
     app.add_handler(CallbackQueryHandler(on_callback_query))
 
     # Обработчик реакций ⭐ на сообщения

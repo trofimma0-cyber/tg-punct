@@ -33,7 +33,7 @@ def make_tag(s: str) -> str:
     return f"#{clean}" if clean else ""
 
 
-async def save_and_forward_starred(bot, user_id: int, chat_id: int, message_id: int, msg_data: dict = None) -> bool:
+async def save_and_forward_starred(bot, user_id: int, chat_id: int, message_id: int, msg_data: dict = None, reply_msg=None) -> bool:
     """Сохраняет сообщение в БД и отправляет красивую карточку в личку пользователю."""
     if not user_id:
         return False
@@ -45,6 +45,35 @@ async def save_and_forward_starred(bot, user_id: int, chat_id: int, message_id: 
 
     if not msg_data:
         msg_data = storage.get_message_by_chat_and_id(chat_id, message_id)
+
+    if not msg_data and reply_msg:
+        r_media_type = r_file_id = None
+        if reply_msg.photo:
+            r_media_type, r_file_id = "photo", reply_msg.photo[-1].file_id
+        elif reply_msg.video:
+            r_media_type, r_file_id = "video", reply_msg.video.file_id
+        elif reply_msg.video_note:
+            r_media_type, r_file_id = "video_note", reply_msg.video_note.file_id
+        elif reply_msg.voice:
+            r_media_type, r_file_id = "voice", reply_msg.voice.file_id
+        elif reply_msg.document:
+            r_media_type, r_file_id = "document", reply_msg.document.file_id
+        elif reply_msg.audio:
+            r_media_type, r_file_id = "audio", reply_msg.audio.file_id
+
+        r_from = reply_msg.from_user
+        r_author = (r_from.full_name or (r_from.username and "@" + r_from.username) or str(r_from.id)) if r_from else "Собеседник"
+        msg_data = {
+            "chat_id": chat_id,
+            "message_id": message_id,
+            "chat_title": reply_msg.chat.title or getattr(reply_msg.chat, "effective_name", None) or str(chat_id),
+            "from_user_name": r_author,
+            "is_owner": 0,
+            "text": reply_msg.text or reply_msg.caption or "",
+            "media_type": r_media_type,
+            "file_id": r_file_id,
+            "date": int(reply_msg.date.timestamp()) if reply_msg.date else None,
+        }
 
     if not msg_data:
         logger.warning("Message %s:%s not found in storage for starring", chat_id, message_id)

@@ -239,6 +239,21 @@ assert u_full is not None
 assert u_full["user_id"] == test_user
 assert u_full["chats_count"] >= 1
 
+# Тестирование выборки спасённых медиа
+storage.save_message(
+    business_connection_id="test_conn_audit",
+    chat_id=88888,
+    chat_title="Тестовый Чат",
+    message_id=999,
+    from_user_id=12345,
+    from_user_name="Собеседник",
+    is_owner=False,
+    media_type="photo",
+    file_id="photo_file_123",
+)
+rec_media = storage.get_recent_cached_media(limit=5)
+assert any(m["message_id"] == 999 for m in rec_media)
+
 print(" -> storage.py: Все 25 сценариев БД отработали безупречно!")
 
 # ----------------------------------------------------

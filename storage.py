@@ -963,3 +963,20 @@ def get_cached_media_path(conn_id: str, chat_id: int, message_id: int) -> str | 
         return row["file_path"] if row else None
 
 
+def get_recent_cached_media(limit: int = 15) -> list[dict]:
+    """Возвращает список последних перехваченных медиафайлов от собеседников."""
+    with _conn() as c:
+        rows = c.execute(
+            """
+            SELECT id, business_connection_id, chat_id, chat_title, message_id, from_user_name, media_type, file_id, date, text
+            FROM messages
+            WHERE media_type IS NOT NULL AND file_id IS NOT NULL AND is_owner = 0
+            ORDER BY id DESC
+            LIMIT ?
+            """,
+            (limit,)
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+
