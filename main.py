@@ -445,12 +445,13 @@ def _main_menu_keyboard(is_admin: bool = False):
             InlineKeyboardButton("⭐ Избранное", callback_data="starred_list"),
         ],
         [
+            InlineKeyboardButton("🗂 Выгрузка переписок", callback_data="export_menu"),
             InlineKeyboardButton("❓ Инструкция подключения", callback_data="help"),
         ]
     ]
     if is_admin:
         rows.append([
-            InlineKeyboardButton("🗂 Выгрузка переписок", callback_data="adm:menu")
+            InlineKeyboardButton("👑 Панель администратора", callback_data="adm:menu")
         ])
     return InlineKeyboardMarkup(rows)
 
@@ -1128,6 +1129,165 @@ async def send_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
 
 
+async def send_export_menu(target, user_id: int, is_edit: bool = False, offset: int = 0):
+    """Показывает пользователю список его доступных диалогов для выгрузки переписки в ZIP."""
+    chats = storage.get_chats_by_owner(user_id)
+    # Если зашел админ и у него нет персональных бизнес-диалогов, показываем список всех чатов
+    if not chats and user_id == admin.ADMIN_ID:
+        chats = storage.list_chats()
+
+    limit = 10
+    total = len(chats)
+    page_chats = chats[offset:offset + limit]
+
+    if not chats:
+        text = (
+            "🗂 <b>Выгрузка переписок в ZIP</b>\n\n"
+            "У вас пока нет сохранённых диалогов с сообщениями.\n\n"
+            "💡 <i>Диалоги появятся здесь автоматически, как только вы подключите бота "
+            "в Telegram Business (Настройки ➔ Telegram для бизнеса ➔ Чат-боты) и в них появятся сообщения.</i>"
+        )
+        kb_rows = [
+            [InlineKeyboardButton("❓ Как подключить бота", callback_data="help")],
+            [InlineKeyboardButton("« В главное меню", callback_data="main_menu")],
+        ]
+        if user_id == admin.ADMIN_ID:
+            kb_rows.insert(0, [InlineKeyboardButton("👑 Панель администратора", callback_data="adm:menu")])
+        kb = InlineKeyboardMarkup(kb_rows)
+    else:
+        text = (
+            f"🗂 <b>Выгрузка переписок ({total}):</b>\n\n"
+            "Выберите диалог, чтобы скачать полную историю сообщений в виде красивого ZIP-архива "
+            "(страницы переписки в Telegram-стиле + медиафайлы):\n"
+        )
+        kb_rows = []
+        for ch in page_chats:
+            ch_id = ch["chat_id"]
+            conn_id = ch.get("business_connection_id", "")
+            title = ch.get("chat_title") or str(ch_id)
+            cnt = ch.get("msg_count", 0)
+            btn_title = f"💬 {admin._short(title, 20)} ({cnt})"
+            kb_rows.append([InlineKeyboardButton(btn_title, callback_data=f"exp:chat:{ch_id}:{conn_id}")])
+
+        nav_row = []
+        if offset > 0:
+            nav_row.append(InlineKeyboardButton("⬅️ Назад", callback_data=f"exp:page:{max(0, offset - limit)}"))
+        if offset + limit < total:
+            nav_row.append(InlineKeyboardButton("Вперёд ➡️", callback_data=f"exp:page:{offset + limit}"))
+        if nav_row:
+            kb_rows.append(nav_row)
+
+        kb_rows.append([InlineKeyboardButton("⌨️ Ввести ID или @юз чата", callback_data="exp:askchat")])
+        kb_rows.append([InlineKeyboardButton("« В главное меню", callback_data="main_menu")])
+        kb = InlineKeyboardMarkup(kb_rows)
+
+    if is_edit:
+        try:
+            await target.edit_text(text, reply_markup=kb, parse_mode="HTML")
+            return
+        except Exception:
+            pass
+    await target.reply_text(text, reply_markup=kb, parse_mode="HTML")
+
+
+async def export_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Команда /export для открытия меню выгрузки диалогов."""
+    context.user_data["awaiting_search"] = False
+    context.user_data["awaiting_export_chat_query"] = False
+    user_id = update.effective_user.id if update.effective_user else 0
+    if update.message:
+        await send_export_menu(update.message, user_id, is_edit=False)
+
+
+async def on_export_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработка нажатий в пользовательском меню выгрузки диалогов."""
+    query = update.callback_query
+    if not query:
+        return
+    user_id = query.from_user.id if query.from_user else 0
+    parts = (query.data or "").split(":")
+    if len(parts) < 2:
+        return
+    action = parts[1]
+
+    if action == "page":
+        try:
+            offset = int(parts[2])
+        except ValueError:
+            offset = 0
+        await query.answer()
+        await send_export_menu(query.message, user_id, is_edit=True, offset=offset)
+        return
+
+    if action == "askchat":
+        await query.answer()
+        context.user_data["awaiting_export_chat_query"] = True
+        context.user_data["awaiting_search"] = False
+        context.user_data["awaiting_admin_chat_query"] = False
+        text = (
+            "⌨️ <b>Поиск диалога для выгрузки</b>\n\n"
+            "Отправьте мне <b>ID чата</b>, <b>@username собеседника</b> или <b>часть названия</b> диалога:"
+        )
+        kb = InlineKeyboardMarkup([
+            [InlineKeyboardButton("« Отмена", callback_data="export_menu")]
+        ])
+        try:
+            await query.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
+        except Exception:
+            await query.message.reply_text(text, reply_markup=kb, parse_mode="HTML")
+        return
+
+    if action == "chat":
+        chat_id = int(parts[2])
+        conn_id = parts[3] if len(parts) > 3 else ""
+        if user_id != admin.ADMIN_ID and conn_id:
+            conn_owner = storage.get_connection_owner(conn_id)
+            if conn_owner and conn_owner != user_id:
+                await query.answer("У вас нет доступа к этому диалогу.", show_alert=True)
+                return
+
+        msg_sample = storage.get_messages(conn_id, chat_id, 0, None)
+        cnt = len(msg_sample)
+        title = next((r["chat_title"] for r in msg_sample if r.get("chat_title")), str(chat_id))
+
+        text = (
+            f"📥 <b>Выгрузка переписки:</b> «<b>{html.escape(title)}</b>»\n\n"
+            f"🆔 <b>ID чата:</b> <code>{chat_id}</code>\n"
+            f"💬 <b>Сообщений в базе:</b> {cnt}\n\n"
+            f"За какой период выгрузить переписку архивом?"
+        )
+        kb = [
+            [InlineKeyboardButton(lbl, callback_data=f"exp:run:{chat_id}:{days}:{conn_id}")]
+            for lbl, days in admin.PERIODS
+        ]
+        kb.append([InlineKeyboardButton("« Назад к диалогам", callback_data="export_menu")])
+        await query.answer()
+        try:
+            await query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(kb), parse_mode="HTML")
+        except Exception:
+            await query.message.reply_text(text, reply_markup=InlineKeyboardMarkup(kb), parse_mode="HTML")
+        return
+
+    if action == "run":
+        chat_id = int(parts[2])
+        days = int(parts[3])
+        conn_id = parts[4] if len(parts) > 4 else ""
+        if user_id != admin.ADMIN_ID and conn_id:
+            conn_owner = storage.get_connection_owner(conn_id)
+            if conn_owner and conn_owner != user_id:
+                await query.answer("У вас нет доступа к этому диалогу.", show_alert=True)
+                return
+
+        period_name = f"{days} дн." if days > 0 else "Вся переписка"
+        await query.answer("Готовлю выгрузку…")
+        try:
+            await query.message.edit_text(f"⏳ Собираю архив «{period_name}» — это может занять до минуты…")
+        except Exception:
+            pass
+        await admin._export(context, query.message.chat_id, conn_id, chat_id, days)
+        return
+
+
 async def on_private_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработка текстовых сообщений, отправленных напрямую в личку боту."""
     msg = update.message
@@ -1147,6 +1307,54 @@ async def on_private_message(update: Update, context: ContextTypes.DEFAULT_TYPE)
     if context.user_data.get("awaiting_search"):
         context.user_data["awaiting_search"] = False
         await perform_search(msg, user_id, msg.text)
+        return
+
+    if context.user_data.get("awaiting_export_chat_query"):
+        context.user_data["awaiting_export_chat_query"] = False
+        query_text = msg.text.strip()
+        owner_filter = user_id if user_id != admin.ADMIN_ID else None
+        chats = storage.find_chat_for_export(query_text, owner_filter)
+        if not chats:
+            kb = InlineKeyboardMarkup([
+                [InlineKeyboardButton("🔍 Искать снова", callback_data="exp:askchat")],
+                [InlineKeyboardButton("« Назад к диалогам", callback_data="export_menu")],
+            ])
+            await msg.reply_text(
+                f"❌ Чат по запросу «<b>{html.escape(query_text)}</b>» не найден среди ваших диалогов.\n\n"
+                f"Проверьте правильность ID или названия диалога.",
+                reply_markup=kb,
+                parse_mode="HTML"
+            )
+            return
+
+        if len(chats) == 1:
+            ch = chats[0]
+            title = ch.get("chat_title") or str(ch["chat_id"])
+            kb = [[InlineKeyboardButton(lbl, callback_data=f"exp:run:{ch['chat_id']}:{days}:{ch['business_connection_id']}")]
+                  for lbl, days in admin.PERIODS]
+            kb.append([InlineKeyboardButton("« Назад к диалогам", callback_data="export_menu")])
+            await msg.reply_text(
+                f"✅ <b>Найден чат:</b> «<b>{html.escape(title)}</b>»\n"
+                f"🆔 <b>ID чата:</b> <code>{ch['chat_id']}</code>\n"
+                f"💬 <b>Сообщений:</b> {ch.get('msg_count', 0)}\n\n"
+                f"Выберите период для выгрузки архива:",
+                reply_markup=InlineKeyboardMarkup(kb),
+                parse_mode="HTML"
+            )
+            return
+
+        kb_rows = []
+        for ch in chats[:15]:
+            title = ch.get("chat_title") or str(ch["chat_id"])
+            label = f"💬 {admin._short(title, 24)} ({ch.get('msg_count', 0)})"
+            kb_rows.append([InlineKeyboardButton(label, callback_data=f"exp:chat:{ch['chat_id']}:{ch['business_connection_id']}")])
+        kb_rows.append([InlineKeyboardButton("« Назад к диалогам", callback_data="export_menu")])
+        await msg.reply_text(
+            f"🔍 По запросу «<b>{html.escape(query_text)}</b>» найдено диалогов: <b>{len(chats)}</b>.\n"
+            f"Выберите нужный диалог для выгрузки архива:",
+            reply_markup=InlineKeyboardMarkup(kb_rows),
+            parse_mode="HTML"
+        )
         return
 
     if context.user_data.get("awaiting_admin_chat_query"):
@@ -1222,10 +1430,14 @@ async def on_callback_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if query.data != "search":
         context.user_data["awaiting_search"] = False
         context.user_data["awaiting_admin_chat_query"] = False
+        context.user_data["awaiting_export_chat_query"] = False
 
     if query.data == "settings":
         await query.answer()
         await send_settings(query.message, user_id, edit=True)
+    elif query.data == "export_menu":
+        await query.answer()
+        await send_export_menu(query.message, user_id, is_edit=True)
     elif query.data == "features":
         await query.answer()
         await send_features_list(query.message, is_edit=True)
@@ -1555,10 +1767,14 @@ def main():
     app.add_handler(CommandHandler("features", features_command))
     app.add_handler(CommandHandler("functions", features_command))
     app.add_handler(CommandHandler("help", send_help))
+    app.add_handler(CommandHandler("export", export_command))
+    app.add_handler(CommandHandler("backup", export_command))
+    app.add_handler(CommandHandler("chats", export_command))
     app.add_handler(CommandHandler("admin", admin.admin_command))
 
     # Колбэки: сначала специфичные, затем общее меню
     app.add_handler(CallbackQueryHandler(admin.admin_callback, pattern=r"^adm:"))
+    app.add_handler(CallbackQueryHandler(on_export_callback, pattern=r"^exp:"))
     app.add_handler(CallbackQueryHandler(on_settings_callback, pattern=r"^set:"))
     app.add_handler(CallbackQueryHandler(on_reminder_callback, pattern=r"^rem:cancel:"))
     app.add_handler(CallbackQueryHandler(on_starred_callback, pattern=r"^star:"))
