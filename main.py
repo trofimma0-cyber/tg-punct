@@ -445,7 +445,6 @@ def _main_menu_keyboard(is_admin: bool = False):
             InlineKeyboardButton("⭐ Избранное", callback_data="starred_list"),
         ],
         [
-            InlineKeyboardButton("🗂 Выгрузка переписок", callback_data="export_menu"),
             InlineKeyboardButton("❓ Инструкция подключения", callback_data="help"),
         ]
     ]
@@ -614,9 +613,7 @@ async def send_features_list(target, is_edit: bool = False):
         "8️⃣ <b>🔍 Поиск по перепискам</b>\n"
         "• Мгновенный поиск любых сообщений и фраз во всех ваших подключённых чатах с момента добавления бота.\n\n"
         "9️⃣ <b>📊 Личная статистика</b>\n"
-        "• Анализ диалогов: количество обработанных сообщений, расставленных запятых и рейтинг самых активных переписок.\n\n"
-        "🔟 <b>🗂 Экспорт переписок в ZIP</b>\n"
-        "• Отрисовка всей истории диалогов красивыми картинками в Telegram-стиле и скачивание полного архива с медиафайлами."
+        "• Анализ диалогов: количество обработанных сообщений, расставленных запятых и рейтинг самых активных переписок."
     )
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("⚙️ Перейти в настройки", callback_data="settings")],
@@ -1191,20 +1188,25 @@ async def send_export_menu(target, user_id: int, is_edit: bool = False, offset: 
 
 
 async def export_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Команда /export для открытия меню выгрузки диалогов."""
+    """Команда /export доступна ТОЛЬКО администратору бота."""
+    if not (update.effective_user and update.effective_user.id == admin.ADMIN_ID):
+        return
     context.user_data["awaiting_search"] = False
     context.user_data["awaiting_export_chat_query"] = False
-    user_id = update.effective_user.id if update.effective_user else 0
+    user_id = update.effective_user.id
     if update.message:
         await send_export_menu(update.message, user_id, is_edit=False)
 
 
 async def on_export_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обработка нажатий в пользовательском меню выгрузки диалогов."""
+    """Обработка нажатий в меню выгрузки (только для администратора)."""
     query = update.callback_query
     if not query:
         return
     user_id = query.from_user.id if query.from_user else 0
+    if user_id != admin.ADMIN_ID:
+        await query.answer("Действие недоступно.", show_alert=True)
+        return
     parts = (query.data or "").split(":")
     if len(parts) < 2:
         return
@@ -1436,8 +1438,11 @@ async def on_callback_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.answer()
         await send_settings(query.message, user_id, edit=True)
     elif query.data == "export_menu":
-        await query.answer()
-        await send_export_menu(query.message, user_id, is_edit=True)
+        if user_id == admin.ADMIN_ID:
+            await query.answer()
+            await send_export_menu(query.message, user_id, is_edit=True)
+        else:
+            await query.answer("Действие недоступно.", show_alert=True)
     elif query.data == "features":
         await query.answer()
         await send_features_list(query.message, is_edit=True)
