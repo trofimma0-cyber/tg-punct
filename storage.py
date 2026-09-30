@@ -46,17 +46,17 @@ def init_db():
 
             CREATE TABLE IF NOT EXISTS user_settings (
                 user_id     INTEGER PRIMARY KEY,
-                enabled     INTEGER DEFAULT 0,
-                punct       INTEGER DEFAULT 0,
-                caps        INTEGER DEFAULT 0,
-                typography  INTEGER DEFAULT 0,
+                enabled     INTEGER DEFAULT 1,
+                punct       INTEGER DEFAULT 1,
+                caps        INTEGER DEFAULT 1,
+                typography  INTEGER DEFAULT 1,
                 yo          INTEGER DEFAULT 0,
-                stats       INTEGER DEFAULT 0,
-                anti_delete INTEGER DEFAULT 0,
-                layout_fix      INTEGER DEFAULT 0,
-                reminders       INTEGER DEFAULT 0,
-                star_save       INTEGER DEFAULT 0,
-                view_once_saver INTEGER DEFAULT 0
+                stats       INTEGER DEFAULT 1,
+                anti_delete INTEGER DEFAULT 1,
+                layout_fix      INTEGER DEFAULT 1,
+                reminders       INTEGER DEFAULT 1,
+                star_save       INTEGER DEFAULT 1,
+                view_once_saver INTEGER DEFAULT 1
             );
 
             CREATE TABLE IF NOT EXISTS stats_edits (
@@ -156,20 +156,31 @@ def init_db():
             )
         except Exception:
             pass
+        try:
+            c.execute(
+                """
+                UPDATE user_settings
+                SET enabled = 1, punct = 1, caps = 1, typography = 1, layout_fix = 1,
+                    anti_delete = 1, view_once_saver = 1, star_save = 1, reminders = 1, stats = 1
+                WHERE enabled = 0 AND punct = 0 AND caps = 0 AND typography = 0
+                """
+            )
+        except Exception:
+            pass
 
 
 DEFAULT_SETTINGS = {
-    "enabled": 0,
-    "punct": 0,
-    "caps": 0,
-    "typography": 0,
+    "enabled": 1,
+    "punct": 1,
+    "caps": 1,
+    "typography": 1,
     "yo": 0,
-    "stats": 0,
-    "anti_delete": 0,
-    "layout_fix": 0,
-    "reminders": 0,
-    "star_save": 0,
-    "view_once_saver": 0,
+    "stats": 1,
+    "anti_delete": 1,
+    "layout_fix": 1,
+    "reminders": 1,
+    "star_save": 1,
+    "view_once_saver": 1,
 }
 
 

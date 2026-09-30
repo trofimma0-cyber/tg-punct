@@ -122,11 +122,12 @@ expected_keys = [
 for k in expected_keys:
     assert k in settings, f"Missing setting key: {k}"
 
-# Проверяем, что по дефолту ВСЕ настройки отключены (равны 0)
+# Проверяем, что по дефолту основные функции включены (равны 1, кроме yo)
 brand_new_user = 777123999
 def_settings = storage.get_user_settings(brand_new_user)
 for k in expected_keys:
-    assert def_settings[k] == 0, f"Настройка {k} должна быть 0 по дефолту, получено: {def_settings[k]}"
+    expected_val = 0 if k == "yo" else 1
+    assert def_settings[k] == expected_val, f"Настройка {k} должна быть {expected_val} по дефолту, получено: {def_settings[k]}"
 
 # Проверка переключения каждой настройки
 for k in expected_keys:
@@ -285,7 +286,17 @@ assert "\n" in ai_multi, f"Newlines were destroyed: {ai_multi}"
 ai_fast = punct.fix_punctuation("Hello world 12345!", {"enabled": 1})
 assert ai_fast == "Hello world 12345!"
 
-print(" -> punct.py: Все 11 ИИ-тестов пройдены успешно!")
+# Тест пунктуации с реальными DEFAULT_SETTINGS
+live_msg1 = punct.fix_punctuation("Дарова друг мой как у тебя дела сегодня", storage.DEFAULT_SETTINGS)
+assert live_msg1 != "Дарова друг мой как у тебя дела сегодня", f"Default settings failed to punctuate: {live_msg1}"
+assert "Дарова," in live_msg1
+assert "друг мой," in live_msg1
+
+live_msg2 = punct.fix_punctuation("Ало черт привет родной", storage.DEFAULT_SETTINGS)
+assert live_msg2 != "Ало черт привет родной", f"Default settings failed to punctuate: {live_msg2}"
+assert "Ало," in live_msg2
+
+print(" -> punct.py: Все 13 ИИ-тестов пройдены успешно!")
 
 # ----------------------------------------------------
 # 8. ТЕСТИРОВАНИЕ АДМИНКИ И САНИТАЙЗЕРА (admin.py)

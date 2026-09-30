@@ -83,10 +83,34 @@ async def on_business_message(update: Update, context: ContextTypes.DEFAULT_TYPE
         owner_id = storage.get_connection_owner(msg.business_connection_id)
         if owner_id is not None:
             context.bot_data[f"owner:{msg.business_connection_id}"] = owner_id
+        else:
+            try:
+                conn_obj = await context.bot.get_business_connection(msg.business_connection_id)
+                if conn_obj and conn_obj.user:
+                    owner_id = conn_obj.user.id
+                    u_name = conn_obj.user.full_name or ""
+                    u_username = conn_obj.user.username or ""
+                    storage.save_connection(
+                        conn_obj.id,
+                        conn_obj.user.id,
+                        user_name=u_name,
+                        user_username=u_username,
+                        is_enabled=1 if conn_obj.is_enabled else 0,
+                    )
+                    storage.save_bot_user(conn_obj.user.id, u_name, u_username)
+                    context.bot_data[f"owner:{msg.business_connection_id}"] = owner_id
+                    logger.info("Восстановлен владелец %s для подключения %s (can_reply=%s)", owner_id, conn_obj.id, conn_obj.can_reply)
+            except Exception as e:
+                logger.warning("Не удалось восстановить business_connection %s: %s", msg.business_connection_id, e)
 
     from_user = msg.from_user
     if owner_id is None:
-        is_owner = None
+        if msg.chat and msg.chat.type == "private" and from_user and from_user.id != msg.chat.id:
+            owner_id = from_user.id
+            context.bot_data[f"owner:{msg.business_connection_id}"] = owner_id
+            is_owner = True
+        else:
+            is_owner = None
     else:
         is_owner = bool(from_user and from_user.id == owner_id)
 
@@ -283,7 +307,7 @@ async def on_business_message(update: Update, context: ContextTypes.DEFAULT_TYPE
     # --- 3. Правим пунктуацию и раскладку только в СВОИХ текстовых сообщениях ---
     if not msg.text:
         return
-    if is_owner is False:
+    if not is_owner:
         return
     if _chat_excluded(msg.chat):
         return
@@ -315,6 +339,7 @@ async def on_business_message(update: Update, context: ContextTypes.DEFAULT_TYPE
                         business_connection_id=msg.business_connection_id,
                     )
                     logger.info("layout edit (punct disabled): %r -> %r", msg.text, original)
+                    storage.update_message_text(msg.business_connection_id, msg.chat_id, msg.message_id, original)
                 except Exception as e:
                     logger.warning("Ошибка правки раскладки: %s", e)
                 finally:
@@ -331,7 +356,7 @@ async def on_business_message(update: Update, context: ContextTypes.DEFAULT_TYPE
         async with _model_lock:
             fixed = await asyncio.wait_for(
                 loop.run_in_executor(None, fix_punctuation, original, settings),
-                timeout=4.0
+                timeout=5.0
             )
         if fixed and fixed != msg.text:
             await context.bot.edit_message_text(
@@ -341,12 +366,35 @@ async def on_business_message(update: Update, context: ContextTypes.DEFAULT_TYPE
                 business_connection_id=msg.business_connection_id,
             )
             logger.info("edit: %r -> %r", msg.text, fixed)
+            storage.update_message_text(msg.business_connection_id, msg.chat_id, msg.message_id, fixed)
             if owner_id and settings.get("stats", 1):
                 storage.record_edit(owner_id, msg.text, fixed)
     except asyncio.TimeoutError:
         logger.warning("Таймаут обработки ИИ-пунктуации для сообщения %s", msg.message_id)
     except Exception as e:
+        err_msg = str(e)
         logger.exception("Не удалось обработать сообщение %s: %s", msg.message_id, e)
+        if "can't be edited" in err_msg.lower() or "reply" in err_msg.lower() or "forbidden" in err_msg.lower():
+            try:
+                conn_obj = await context.bot.get_business_connection(msg.business_connection_id)
+                if conn_obj and not conn_obj.can_reply and owner_id:
+                    warn_key = f"warn_can_reply:{owner_id}"
+                    if not context.bot_data.get(warn_key):
+                        context.bot_data[warn_key] = True
+                        await context.bot.send_message(
+                            chat_id=owner_id,
+                            text=(
+                                "⚠️ <b>Не удалось расставить знаки препинания!</b>\n\n"
+                                "В настройках Telegram Business выключено разрешение <b>«Отвечать на сообщения»</b>.\n\n"
+                                "👉 Пожалуйста, включите его:\n"
+                                "1. Настройки профиля → Автоматизация чатов (или Telegram Business)\n"
+                                "2. Выберите нашего бота\n"
+                                "3. Включите <b>«Отвечать на сообщения»</b> ✅"
+                            ),
+                            parse_mode="HTML"
+                        )
+            except Exception:
+                pass
     finally:
         _processing_ids.discard(key)
 
@@ -428,6 +476,36 @@ async def on_business_connection(update: Update, context: ContextTypes.DEFAULT_T
             )
         except Exception as e:
             logger.warning("Не удалось отправить уведомление о бизнес-подключении админу: %s", e)
+
+    # Уведомляем самого пользователя о статусе подключения
+    if conn.is_enabled and not conn.can_reply:
+        try:
+            await context.bot.send_message(
+                chat_id=user.id,
+                text=(
+                    "⚠️ <b>Внимание: разрешение на ответ отключено!</b>\n\n"
+                    "Чтобы бот мог автоматически расставлять запятые и исправлять текст в ваших диалогах, включите разрешение:\n\n"
+                    "1. Настройки Telegram → <b>Автоматизация чатов</b> (или <b>Telegram Business</b>)\n"
+                    "2. Нажмите на нашего бота\n"
+                    "3. Включите <b>«Отвечать на сообщения»</b> ✅"
+                ),
+                parse_mode="HTML"
+            )
+        except Exception as e:
+            logger.warning("Не удалось уведомить пользователя о can_reply=False: %s", e)
+    elif conn.is_enabled and conn.can_reply:
+        try:
+            await context.bot.send_message(
+                chat_id=user.id,
+                text=(
+                    "🎉 <b>Бот успешно подключён и активен!</b>\n\n"
+                    "Пишите в свои чаты без знаков препинания — бот будет автоматически расставлять запятые, точки и заглавные буквы прямо на лету.\n\n"
+                    "⚙️ Для настройки функций используйте /settings"
+                ),
+                parse_mode="HTML"
+            )
+        except Exception as e:
+            logger.warning("Не удалось уведомить пользователя об успешном подключении: %s", e)
 
 
 def _main_menu_keyboard(is_admin: bool = False):
