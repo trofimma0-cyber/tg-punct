@@ -434,18 +434,18 @@ def _main_menu_keyboard(is_admin: bool = False):
     rows = [
         [
             InlineKeyboardButton("⚙️ Настройки", callback_data="settings"),
-            InlineKeyboardButton("💡 Все функции", callback_data="features"),
+            InlineKeyboardButton("💡 Возможности", callback_data="features"),
         ],
         [
-            InlineKeyboardButton("📊 Моя статистика", callback_data="stats"),
-            InlineKeyboardButton("🔍 Поиск сообщений", callback_data="search"),
+            InlineKeyboardButton("📊 Статистика", callback_data="stats"),
+            InlineKeyboardButton("🔍 Поиск", callback_data="search"),
         ],
         [
-            InlineKeyboardButton("⏰ Мои встречи", callback_data="reminders_list"),
+            InlineKeyboardButton("⏰ Встречи", callback_data="reminders_list"),
             InlineKeyboardButton("⭐ Избранное", callback_data="starred_list"),
         ],
         [
-            InlineKeyboardButton("❓ Инструкция подключения", callback_data="help"),
+            InlineKeyboardButton("❓ Как подключить", callback_data="help"),
         ]
     ]
     if is_admin:
@@ -464,7 +464,7 @@ def _settings_keyboard(user_id: int):
     rows = [
         [
             InlineKeyboardButton(
-                f"✍️ ИИ-пунктуация (запятые): {icon(st.get('enabled', 1))}",
+                f"✍️ Расстановка запятых: {icon(st.get('enabled', 1))}",
                 callback_data="set:enabled",
             )
         ],
@@ -480,24 +480,18 @@ def _settings_keyboard(user_id: int):
         ],
         [
             InlineKeyboardButton(
-                f"⭐ Сохранение по реакции ⭐: {icon(st.get('star_save', 1))}",
+                f"⭐ Избранное по ⭐: {icon(st.get('star_save', 1))}",
                 callback_data="set:star_save",
-            )
-        ],
-        [
+            ),
             InlineKeyboardButton(
                 f"⌨️ Авто-раскладка: {icon(st.get('layout_fix', 1))}",
                 callback_data="set:layout_fix",
             ),
-            InlineKeyboardButton(
-                f"⏰ Встречи: {icon(st.get('reminders', 1))}",
-                callback_data="set:reminders",
-            ),
         ],
         [
             InlineKeyboardButton(
-                f"🔤 Запятые и точки: {icon(st.get('punct', 1))}",
-                callback_data="set:punct",
+                f"⏰ Встречи: {icon(st.get('reminders', 1))}",
+                callback_data="set:reminders",
             ),
             InlineKeyboardButton(
                 f"🔠 Заглавные: {icon(st.get('caps', 1))}",
@@ -515,12 +509,6 @@ def _settings_keyboard(user_id: int):
             ),
         ],
         [
-            InlineKeyboardButton(
-                f"📊 Сбор статистики: {icon(st.get('stats', 1))}",
-                callback_data="set:stats",
-            )
-        ],
-        [
             InlineKeyboardButton("« В главное меню", callback_data="main_menu")
         ],
     ]
@@ -529,21 +517,8 @@ def _settings_keyboard(user_id: int):
 
 async def send_settings(target_msg, user_id: int, edit: bool = True):
     text = (
-        "⚙️ <b>Настройки автоматизации:</b>\n\n"
-        "Нажимайте на кнопки, чтобы включать или выключать нужные функции (нажмите кнопку, чтобы прочесть подсказку):\n\n"
-        "• <b>✍️ ИИ-пунктуация (запятые)</b> — главный тумблер: включение/отключение расстановки запятых и знаков в ваших сообщениях. "
-        "<i>Если отключить, бот <b>НЕ будет ставить запятые и не тронет ваш текст</b>, но продолжит выполнять все остальные функции (анти-удаление, сгорающие фото, встречи, ⭐ избранное, веб-поиск)!</i>\n\n"
-        "• <b>🗑 Анти-удаление</b> — мгновенная пересылка вам в личку любого удалённого или изменённого собеседником сообщения (кружки, войсы, фото, файлы, текст).\n"
-        "• <b>🔥 Сгорающие фото (View-Once)</b> — спасает одноразовые фото, видео и кружки до того, как они сгорят по таймеру собеседника.\n"
-        "• <b>⭐ Сохранение по реакции ⭐</b> — реагируйте ⭐ (или отвечайте ⭐) на любое сообщение, чтобы сохранить его себе в личку с тегами и автором.\n"
-        "• <b>⌨️ Авто-раскладка</b> — исправление набранного не в той раскладке текста (<i>ghbdtn ➔ привет</i>).\n"
-        "• <b>⏰ Встречи и напоминания</b> — бот ловит планы (<i>«давай гулять в 10:50»</i>), напоминает за 1 час и за 30 минут, а при словах <i>«не могу/отмена»</i> автоматически снимает встречу.\n"
-        "• <b>🔤 Запятые и точки</b> — точечный переключатель расстановки запятых и двоеточий.\n"
-        "• <b>🔠 Заглавные буквы</b> — делать первую букву предложений заглавной.\n"
-        "• <b>🔣 Тире и кавычки</b> — превращает дефисы в длинное тире (« — ») и кавычки в «ёлочки».\n"
-        "• <b>Буква «Ё»</b> — авто-замена «е» на «ё» в частых словах (ещё, всё, её...).\n"
-        "• <b>📊 Сбор статистики</b> — подсчёт активности диалогов и расставленных знаков.\n\n"
-        "🌐 <i>Поиск инфы в интернете: напишите в любом чате <code>!инфо запрос</code> (или <code>!гугл</code>, <code>!факт</code>), и бот моментально вставит выжимку!</i>"
+        "⚙️ <b>Настройки:</b>\n"
+        "Нажмите кнопку, чтобы переключить нужную функцию:"
     )
     kb = _settings_keyboard(user_id)
     if edit:
@@ -556,20 +531,17 @@ async def send_settings(target_msg, user_id: int, edit: bool = True):
 
 
 SETTING_INFO = {
-    "enabled": (
-        "ИИ-пунктуация (запятые)",
-        "Главный тумблер: если выключить, бот НЕ будет ставить запятые и знаки в ваших сообщениях, но продолжит выполнять ВСЕ остальные функции (анти-удаление, встречи, сгорающие фото, ⭐ избранное, поиск)!"
-    ),
-    "anti_delete": ("Анти-удаление", "Шпион-лог: мгновенная пересылка вам удалённых и изменённых сообщений собеседника."),
-    "view_once_saver": ("Сгорающие фото", "View-Once: спасение одноразовых фото, видео и кружков до того, как они сгорят по таймеру."),
-    "star_save": ("Сохранение ⭐", "Избранное: сохранение сообщений в личку при реакции ⭐ или ответе ⭐."),
-    "layout_fix": ("Авто-раскладка", "Punto Switcher: авто-исправление забытой раскладки (ghbdtn ➔ привет)."),
-    "reminders": ("Встречи", "Детектор планов в чате и напоминания в личку за 1ч и 30м до встречи."),
-    "punct": ("Запятые и точки", "Точечная расстановка запятых, точек и двоеточий. Если выключить, бот не расставляет запятые, сохраняя авторский текст."),
-    "caps": ("Заглавные буквы", "Делать первую букву предложений заглавной."),
-    "typography": ("Тире и кавычки", "Превращение дефисов в длинное тире (« — ») и кавычек в «ёлочки»."),
-    "yo": ("Буква «Ё»", "Авто-замена буквы «е» на «ё» в частых словах (ещё, всё, её...)."),
-    "stats": ("Сбор статистики", "Подсчёт сообщений, правок и активности в диалогах."),
+    "enabled": ("ИИ-пунктуация", "Автоматическая расстановка запятых и точек."),
+    "anti_delete": ("Анти-удаление", "Пересылка удалённых и изменённых сообщений."),
+    "view_once_saver": ("Сгорающие фото", "Сохранение одноразовых фото и видео."),
+    "star_save": ("Избранное", "Сохранение сообщений по реакции ⭐."),
+    "layout_fix": ("Авто-раскладка", "Исправление забытой раскладки клавиатуры."),
+    "reminders": ("Встречи", "Напоминания о запланированных встречах."),
+    "punct": ("Запятые и точки", "Точечная расстановка знаков препинания."),
+    "caps": ("Заглавные буквы", "Автоматические заглавные буквы."),
+    "typography": ("Тире и кавычки", "Красивые тире и кавычки-ёлочки."),
+    "yo": ("Буква «Ё»", "Автоматическая замена на букву «ё»."),
+    "stats": ("Статистика", "Подсчёт сообщений и активности."),
 }
 
 
@@ -583,9 +555,9 @@ async def on_settings_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     key = parts[1]
     user_id = query.from_user.id
     st = storage.toggle_user_setting(user_id, key)
-    new_state = "ВКЛЮЧЕНО ✅" if st.get(key) else "ВЫКЛЮЧЕНО ❌"
-    title, desc = SETTING_INFO.get(key, (key, ""))
-    await query.answer(f"{title}: {new_state}\n\n{desc}", show_alert=True)
+    new_state = "ВКЛ ✅" if st.get(key) else "ВЫКЛ ❌"
+    title, _ = SETTING_INFO.get(key, (key, ""))
+    await query.answer(f"{title}: {new_state}")
     try:
         await query.edit_message_reply_markup(reply_markup=_settings_keyboard(user_id))
     except Exception:
@@ -593,30 +565,21 @@ async def on_settings_callback(update: Update, context: ContextTypes.DEFAULT_TYP
 
 
 async def send_features_list(target, is_edit: bool = False):
-    """Подробный иллюстрированный справочник всех функций бота."""
+    """Справочник функций бота."""
     text = (
-        "💡 <b>КРАТКИЙ СПРАВОЧНИК ФУНКЦИЙ БОТА:</b>\n\n"
-        "1️⃣ <b>✍️ ИИ-пунктуация и запятые</b>\n"
-        "• Автоматически расставляет запятые, точки, двоеточия и заглавные буквы в ваших исходящих сообщениях в подключённых диалогах.\n\n"
-        "2️⃣ <b>🗑 Анти-удаление (Шпион-лог)</b>\n"
-        "• Если собеседник удалил или изменил своё сообщение (текст, фото, видео, кружок, войс, файл) — бот мгновенно присылает вам оригинал в личку.\n\n"
-        "3️⃣ <b>🔥 Сгорающие фото (View-Once Saver)</b>\n"
-        "• Спасает одноразовые фото, видео и кружки. Бот делает пред-кэш медиа, и когда фото сгорает в чате по таймеру собеседника, присылает вам спасённую копию.\n\n"
-        "4️⃣ <b>⌨️ Авто-раскладка (Punto Switcher)</b>\n"
-        "• Забыли переключить язык? <code>ghbdtn rfr ltkf?</code> моментально заменится на <i>«Привет, как дела?»</i> (английские фразы бот не трогает).\n\n"
-        "5️⃣ <b>⏰ Встречи и напоминания</b>\n"
-        "• Ловит предложения планов (<i>«давай созвон в 15:00»</i>), напоминает за 1 час и за 30 мин в личку. При словах <i>«не могу/отмена»</i> автоматически снимает встречу.\n\n"
-        "6️⃣ <b>🌐 Поиск фактов в интернете</b>\n"
-        "• Напишите в любом чате <code>!инфо запрос</code> (или <code>!гугл</code>, <code>!факт</code>) — бот за секунду вставит краткую выжимку из сети.\n\n"
-        "7️⃣ <b>⭐ Сохранение в Избранное</b>\n"
-        "• Поставьте реакцию <b>⭐</b> (или ответьте <b>⭐</b>) на любое сообщение — бот перешлёт его вам в личку с тегами <code>#избранное #чат #автор</code>.\n\n"
-        "8️⃣ <b>🔍 Поиск по перепискам</b>\n"
-        "• Мгновенный поиск любых сообщений и фраз во всех ваших подключённых чатах с момента добавления бота.\n\n"
-        "9️⃣ <b>📊 Личная статистика</b>\n"
-        "• Анализ диалогов: количество обработанных сообщений, расставленных запятых и рейтинг самых активных переписок."
+        "💡 <b>Возможности бота:</b>\n\n"
+        "• ✍️ <b>Запятые</b> — расстановка знаков и заглавных букв в ваших сообщениях\n"
+        "• 🗑 <b>Анти-удаление</b> — пересылка удалённых и изменённых сообщений собеседника\n"
+        "• 🔥 <b>Сгорающие фото</b> — сохранение медиа до их исчезновения по таймеру\n"
+        "• ⌨️ <b>Авто-раскладка</b> — исправление раскладки (<i>ghbdtn ➔ привет</i>)\n"
+        "• ⏰ <b>Встречи</b> — авто-напоминания о встречах за 1 час и за 30 минут\n"
+        "• 🌐 <b>Поиск</b> — напишите <code>!инфо запрос</code> для быстрой справки из сети\n"
+        "• ⭐ <b>Избранное</b> — сохранение любого сообщения по реакции ⭐ или ответу ⭐\n"
+        "• 🔍 <b>Поиск</b> — быстрый поиск любых сообщений по диалогам\n"
+        "• 📊 <b>Статистика</b> — подсчёт активности и сообщений"
     )
     kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("⚙️ Перейти в настройки", callback_data="settings")],
+        [InlineKeyboardButton("⚙️ Настройки", callback_data="settings")],
         [InlineKeyboardButton("« В главное меню", callback_data="main_menu")],
     ])
     if is_edit:
@@ -636,28 +599,22 @@ async def features_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def send_stats(target, user_id: int, is_edit: bool = False):
-    st = storage.get_user_settings(user_id)
     data = storage.get_user_stats(user_id)
     top_chats_text = ""
     if data["top_chats"]:
-        top_chats_text = "\n\n🏆 <b>Топ чатов по сообщениям:</b>\n"
+        top_chats_text = "\n\n🏆 <b>Топ чатов:</b>\n"
         for i, ch in enumerate(data["top_chats"], 1):
             top_chats_text += f"{i}. <b>{html.escape(ch['title'])}</b> — {ch['cnt']} сообщ.\n"
 
-    status_note = ""
-    if not st.get("stats", 0):
-        status_note = "\n\n<i>💡 Детальный подсчёт знаков отключён в «⚙️ Настройки».</i>"
-
     text = (
-        "📊 <b>Ваша статистика (данные собираются всегда):</b>\n\n"
-        f"💬 <b>Всего сообщений в чатах:</b> {data['total_msgs']}\n"
-        f"📤 <b>Отправлено вами:</b> {data['my_msgs'] or 0}\n"
-        f"👥 <b>Активных диалогов:</b> {data['total_chats']}\n\n"
-        f"✍️ <b>Исправлено сообщений:</b> {data['total_edits']}\n"
-        f"🔤 <b>Расставлено запятых:</b> {data['total_commas']}\n"
-        f"📍 <b>Поставлено точек:</b> {data['total_dots']}"
+        "📊 <b>Ваша статистика:</b>\n\n"
+        f"💬 Сообщений в чатах: <b>{data['total_msgs']}</b>\n"
+        f"📤 Отправлено вами: <b>{data['my_msgs'] or 0}</b>\n"
+        f"👥 Диалогов: <b>{data['total_chats']}</b>\n\n"
+        f"✍️ Исправлено: <b>{data['total_edits']}</b>\n"
+        f"🔤 Запятых: <b>{data['total_commas']}</b>\n"
+        f"📍 Точек: <b>{data['total_dots']}</b>"
         f"{top_chats_text}"
-        f"{status_note}"
     )
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("🔄 Обновить", callback_data="stats")],
@@ -681,7 +638,7 @@ async def perform_search(target_msg, user_id: int, query_text: str):
             [InlineKeyboardButton("« В главное меню", callback_data="main_menu")],
         ])
         await target_msg.reply_text(
-            "⚠️ Поисковый запрос пуст. Нажмите кнопку ниже и отправьте слово или фразу для поиска:",
+            "⚠️ Введите слово или фразу для поиска:",
             reply_markup=kb,
             parse_mode="HTML",
         )
@@ -690,20 +647,17 @@ async def perform_search(target_msg, user_id: int, query_text: str):
     esc_query = html.escape(query_text)
     results = storage.search_messages(user_id, query_text, limit=6)
     if not results:
-        text = (
-            f"🔍 По запросу «<b>{esc_query}</b>» ничего не найдено в сохранённых переписках.\n\n"
-            "<i>(Поиск выполняется по сообщениям, сохранённым с момента подключения бота).</i>"
-        )
+        text = f"🔍 По запросу «<b>{esc_query}</b>» ничего не найдено."
     else:
-        text = f"🔍 <b>Результаты поиска по запросу</b> «<b>{esc_query}</b>» ({len(results)}):\n\n"
+        text = f"🔍 <b>Результаты поиска</b> «<b>{esc_query}</b>» ({len(results)}):\n\n"
         for i, r in enumerate(results, 1):
             dt = datetime.fromtimestamp(r["date"], tz=timezone.utc).astimezone().strftime("%d.%m %H:%M")
             author = r["from_user_name"] or ("Вы" if r["is_owner"] == 1 else "Собеседник")
             chat_name = r["chat_title"] or str(r["chat_id"])
             body = (r["text"] or "").strip()
-            if len(body) > 120:
-                body = body[:117] + "..."
-            text += f"{i}️⃣ <b>{html.escape(chat_name)}</b> ({html.escape(author)} • {dt})\n<i>«{html.escape(body)}»</i>\n\n"
+            if len(body) > 100:
+                body = body[:97] + "..."
+            text += f"{i}. <b>{html.escape(chat_name)}</b> ({html.escape(author)}, {dt}):\n<i>«{html.escape(body)}»</i>\n\n"
 
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("🔍 Искать ещё", callback_data="search")],
@@ -749,8 +703,8 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             logger.warning("Не удалось отправить уведомление о старте админу: %s", e)
 
     text = (
-        "👋 Привет! Я бот <b>ИИ Запятые</b> для автоматической расстановки знаков препинания и заглавных букв.\n\n"
-        "Выберите действие ниже:"
+        "👋 Бот <b>ИИ Запятые</b> для Telegram Business.\n\n"
+        "Выберите раздел:"
     )
     if update.message:
         await update.message.reply_text(
@@ -783,11 +737,11 @@ async def search_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         context.user_data["awaiting_search"] = True
         text = (
-            "🔍 <b>Поиск по сохранённым перепискам</b>\n\n"
-            "Отправьте мне следующим сообщением <b>любое слово или фразу</b>, которую хотите найти в диалогах."
+            "🔍 <b>Поиск по диалогам</b>\n\n"
+            "Отправьте слово или фразу для поиска:"
         )
         kb = InlineKeyboardMarkup([
-            [InlineKeyboardButton("« Отмена / В главное меню", callback_data="main_menu")]
+            [InlineKeyboardButton("« В главное меню", callback_data="main_menu")]
         ])
         await update.message.reply_text(text, reply_markup=kb, parse_mode="HTML")
 
@@ -797,22 +751,20 @@ async def send_reminders_list(target, user_id: int, is_edit: bool = False):
     rem_list = storage.get_user_reminders(user_id)
     if not rem_list:
         text = (
-            "⏰ <b>У вас нет активных запланированных встреч.</b>\n\n"
-            "Когда кто-то в чате напишет: <i>«давай гулять в 10:50»</i> или <i>«созвон в 15:00»</i>, "
-            "бот автоматически зафиксирует встречу и пришлёт вам напоминание за 1 час и за 30 минут.\n\n"
-            "<i>Если собеседник напишет «не могу» или «отмена» — бот сам снимет встречу.</i>"
+            "⏰ <b>Встреч пока нет.</b>\n\n"
+            "Напишите в диалоге время (например, <i>«созвон в 15:00»</i>), и бот напомнит о встрече."
         )
         kb = InlineKeyboardMarkup([
             [InlineKeyboardButton("🔄 Обновить", callback_data="reminders_list")],
             [InlineKeyboardButton("« В главное меню", callback_data="main_menu")],
         ])
     else:
-        text = f"⏰ <b>Ваши активные встречи ({len(rem_list)}):</b>\n\n"
+        text = f"⏰ <b>Запланированные встречи ({len(rem_list)}):</b>\n\n"
         rows = []
         for i, r in enumerate(rem_list, 1):
             dt_str = datetime.fromtimestamp(r["target_time"], tz=timezone.utc).astimezone().strftime("%d.%m в %H:%M")
             chat_title = r["chat_title"] or str(r["chat_id"])
-            text += f"{i}️⃣ <b>{html.escape(r['title'])}</b>\n💬 Чат: {html.escape(chat_title)}\n🕒 Время: <b>{dt_str}</b>\n\n"
+            text += f"{i}. <b>{html.escape(r['title'])}</b> ({html.escape(chat_title)}, <b>{dt_str}</b>)\n"
             rows.append([InlineKeyboardButton(f"❌ Убрать «{r['title'][:16]}»", callback_data=f"rem:cancel:{r['id']}")])
         rows.append([
             InlineKeyboardButton("🔄 Обновить", callback_data="reminders_list"),
@@ -975,27 +927,24 @@ async def send_starred_list(target, user_id: int, is_edit: bool = False, offset:
     items = storage.get_starred_messages(user_id, limit=limit, offset=offset)
     if not items and offset == 0:
         text = (
-            "⭐ <b>Ваш список Избранного пуст.</b>\n\n"
-            "Чтобы сохранить любое сообщение в Избранное:\n"
-            "• Поставьте реакцию <b>⭐</b> на сообщение в любом чате;\n"
-            "• Либо ответьте на сообщение эмодзи <b>⭐</b> (или словом <code>!сохрани</code>).\n\n"
-            "Бот мгновенно пришлёт сообщение вам в личку с тегами и автором!"
+            "⭐ <b>Избранное пусто.</b>\n\n"
+            "Поставьте реакцию ⭐ или ответьте ⭐ на любое сообщение в чате, чтобы сохранить его сюда."
         )
         kb = InlineKeyboardMarkup([
             [InlineKeyboardButton("🔄 Обновить", callback_data="starred_list")],
             [InlineKeyboardButton("« В главное меню", callback_data="main_menu")],
         ])
     else:
-        text = f"⭐ <b>Ваши избранные сообщения (показано {len(items)}):</b>\n\n"
+        text = f"⭐ <b>Избранные сообщения ({len(items)}):</b>\n\n"
         rows = []
         for i, item in enumerate(items, 1):
             dt_str = datetime.fromtimestamp(item["date"], tz=timezone.utc).astimezone().strftime("%d.%m %H:%M")
             author = item["author_name"] or "Автор"
             chat_name = item["chat_title"] or str(item["chat_id"])
             body = (item["text"] or item["media_type"] or "Медиафайл").strip()
-            if len(body) > 80:
-                body = body[:77] + "..."
-            text += f"{i}️⃣ <b>{html.escape(chat_name)}</b> ({html.escape(author)} • {dt_str})\n<i>«{html.escape(body)}»</i>\n\n"
+            if len(body) > 70:
+                body = body[:67] + "..."
+            text += f"{i}. <b>{html.escape(chat_name)}</b> ({html.escape(author)}, {dt_str}):\n<i>«{html.escape(body)}»</i>\n\n"
             rows.append([InlineKeyboardButton(f"🗑 Удалить #{item['id']}", callback_data=f"star:del:{item['id']}")])
 
         nav_row = []
@@ -1093,15 +1042,15 @@ async def send_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
         bot_username = "AI_for_commas_bot"
 
     caption = (
-        "📖 <b>Инструкция: как подключить бота к Telegram Business</b>\n\n"
-        "1️⃣ В приложении Telegram откройте: <b>Настройки</b> ➔ <b>Telegram для бизнеса</b> ➔ <b>Чат-боты</b>.\n\n"
-        f"2️⃣ В поле ввода вставьте: <code>@{bot_username}</code> <i>(нажмите, чтобы скопировать)</i> и нажмите кнопку <b>Добавить</b> (ADD).\n\n"
-        "3️⃣ В пункте <b>Кому доступен бот</b> выберите чаты, в которых бот будет автоматически расставлять знаки препинания.\n\n"
-        "💡 <i>Бот работает только в выбранных вами диалогах и редактирует исключительно ваши отправленные сообщения.</i>"
+        "📖 <b>Как подключить бота:</b>\n\n"
+        "1. В Telegram: <b>Настройки ➔ Telegram для бизнеса ➔ Чат-боты</b>\n"
+        f"2. Добавьте: <code>@{bot_username}</code>\n"
+        "3. Выберите нужные чаты.\n\n"
+        "<i>Готово! Бот начнёт работать в выбранных чатах.</i>"
     )
 
     back_keyboard = InlineKeyboardMarkup([
-        [InlineKeyboardButton("💡 Описание всех функций", callback_data="features")],
+        [InlineKeyboardButton("💡 Возможности", callback_data="features")],
         [InlineKeyboardButton("« В главное меню", callback_data="main_menu")],
     ])
 
@@ -1460,11 +1409,11 @@ async def on_callback_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data["awaiting_search"] = True
         context.user_data["awaiting_admin_chat_query"] = False
         text = (
-            "🔍 <b>Поиск по сохранённым перепискам</b>\n\n"
-            "Отправьте мне следующим сообщением <b>любое слово или фразу</b> для поиска в диалогах:"
+            "🔍 <b>Поиск по диалогам</b>\n\n"
+            "Отправьте слово или фразу для поиска:"
         )
         kb = InlineKeyboardMarkup([
-            [InlineKeyboardButton("« Отмена / В главное меню", callback_data="main_menu")]
+            [InlineKeyboardButton("« В главное меню", callback_data="main_menu")]
         ])
         try:
             await query.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
@@ -1476,8 +1425,8 @@ async def on_callback_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif query.data == "main_menu":
         await query.answer()
         text = (
-            "👋 Привет! Я бот <b>ИИ Запятые</b> для автоматической расстановки знаков препинания и заглавных букв.\n\n"
-            "Выберите действие ниже:"
+            "👋 Бот <b>ИИ Запятые</b> для Telegram Business.\n\n"
+            "Выберите раздел:"
         )
         if query.message:
             is_admin = bool(query.from_user and query.from_user.id == admin.ADMIN_ID)

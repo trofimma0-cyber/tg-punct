@@ -66,8 +66,6 @@ def admin_menu():
 
 async def admin_command(update, context):
     if not _is_admin(update):
-        if update.message:
-            await update.message.reply_text("Не для тебя эта кнопка.")
         return
     kb, text = admin_menu()
     if update.message is None:
