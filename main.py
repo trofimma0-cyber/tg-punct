@@ -35,6 +35,7 @@ from telegram.ext import (
     filters,
 )
 
+import punct
 from punct import fix_punctuation
 import storage
 import admin
@@ -1529,7 +1530,7 @@ def main():
             logger.warning("Не удалось запустить keep-alive web-сервер: %s", e)
 
     async def post_init(application: Application):
-        asyncio.create_task(start_web_server())
+        await start_web_server()
         asyncio.create_task(reminders_worker(application))
         loop = asyncio.get_running_loop()
         # Фоновый прогрев ИИ-модели для мгновенного первого отклика
