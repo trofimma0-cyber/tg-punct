@@ -1727,8 +1727,17 @@ async def on_business_messages_deleted(update: Update, context: ContextTypes.DEF
         if not msg_data and not cached_bytes:
             continue
 
-        is_owner = (msg_data.get("is_owner") == 1) if msg_data else False
-        author = (msg_data.get("from_user_name") or ("Вы" if is_owner else "Собеседник")) if msg_data else "Собеседник"
+        is_owner = bool(
+            (msg_data.get("is_owner") == 1) or
+            (owner_id and msg_data.get("from_user_id") == owner_id)
+        ) if msg_data else False
+
+        if is_owner:
+            # Владелец сам удалил своё сообщение — не спамим ему в личные сообщения
+            logger.info("Пропуск уведомления об удалении: сообщение отправлено самим владельцем %s (msg_id=%s)", owner_id, msg_id)
+            continue
+
+        author = (msg_data.get("from_user_name") or "Собеседник") if msg_data else "Собеседник"
         title = (msg_data.get("chat_title") or chat_name) if msg_data else chat_name
         msg_date = (msg_data.get("date") or 0) if msg_data else 0
         dt_str = datetime.fromtimestamp(msg_date, tz=timezone.utc).astimezone().strftime("%d.%m %H:%M") if msg_date else ""
@@ -1741,17 +1750,15 @@ async def on_business_messages_deleted(update: Update, context: ContextTypes.DEF
         file_id = msg_data.get("file_id") if msg_data else None
         text_content = (msg_data.get("text") or "").strip() if msg_data else ""
 
-        is_view_once = (not is_owner) and view_once.is_likely_view_once(lifetime) and (media_type in ("photo", "video", "video_note", "voice"))
+        is_view_once = view_once.is_likely_view_once(lifetime) and (media_type in ("photo", "video", "video_note", "voice"))
 
         if is_view_once:
             status_line = (
-                f"🔥 <b>ПЕРЕХВАЧЕНО СГОРАЮЩЕЕ МЕДИА (VIEW-ONCE)!</b>\n"
+                f"🔥 <b>ПЕРЕХВАЧЕНО СГОРАЮЩЕЕ МЕДИА!</b>\n"
                 f"⏳ <i>Самоуничтожилось или удалено через {lifetime} сек.</i>"
             )
-        elif not is_owner:
-            status_line = "🗑 <b>УДАЛЕНО СООБЩЕНИЕ СОБЕСЕДНИКА!</b>"
         else:
-            status_line = "🗑 <b>Удалено сообщение:</b>"
+            status_line = "🗑 <b>УДАЛЕНО СООБЩЕНИЕ СОБЕСЕДНИКА!</b>"
 
         esc_author = html.escape(author)
         esc_title = html.escape(title)
