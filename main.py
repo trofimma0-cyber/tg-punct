@@ -44,7 +44,6 @@ import storage
 import admin
 import layout
 import reminders
-import websearch
 import starred
 import view_once
 
@@ -309,31 +308,7 @@ async def on_business_message(update: Update, context: ContextTypes.DEFAULT_TYPE
                 except Exception as e:
                     logger.warning("Не удалось отправить карточку встречи: %s", e)
 
-    # --- 2. Поиск фактов в интернете (!инфо, !поиск, !гугл, !факт) в СВОИХ сообщениях ---
-    if msg.text and is_owner is not False:
-        is_search, search_query = websearch.extract_search_query(msg.text)
-        if is_search and search_query:
-            key = (msg.business_connection_id, msg.message_id)
-            if key not in _processing_ids:
-                _processing_ids.add(key)
-                try:
-                    loop = asyncio.get_running_loop()
-                    fact_text = await loop.run_in_executor(None, websearch.get_fact_response, search_query)
-                    await context.bot.edit_message_text(
-                        text=fact_text,
-                        chat_id=msg.chat_id,
-                        message_id=msg.message_id,
-                        business_connection_id=msg.business_connection_id,
-                        parse_mode="HTML"
-                    )
-                    logger.info("web search edit for %r", search_query)
-                    return
-                except Exception as e:
-                    logger.exception("Ошибка поиска факта: %s", e)
-                finally:
-                    _processing_ids.discard(key)
-
-    # --- 3. Правим пунктуацию и раскладку только в СВОИХ текстовых сообщениях ---
+    # --- 2. Правим пунктуацию и раскладку только в СВОИХ текстовых сообщениях ---
     if not msg.text:
         return
     if not is_owner:
@@ -544,15 +519,14 @@ def _main_menu_keyboard(is_admin: bool = False):
             InlineKeyboardButton("💡 Возможности", callback_data="features"),
         ],
         [
-            InlineKeyboardButton("📊 Статистика", callback_data="stats"),
-            InlineKeyboardButton("🔍 Поиск", callback_data="search"),
-        ],
-        [
             InlineKeyboardButton("⏰ Встречи", callback_data="reminders_list"),
             InlineKeyboardButton("⭐ Избранное", callback_data="starred_list"),
         ],
         [
             InlineKeyboardButton("📸 Спасённые фото", callback_data="media_list"),
+            InlineKeyboardButton("📊 Статистика", callback_data="stats"),
+        ],
+        [
             InlineKeyboardButton("❓ Как подключить", callback_data="help"),
         ]
     ]
@@ -678,12 +652,10 @@ async def send_features_list(target, is_edit: bool = False):
         "💡 <b>Возможности бота:</b>\n\n"
         "• ✍️ <b>Запятые</b> — расстановка знаков и заглавных букв в ваших сообщениях\n"
         "• 🗑 <b>Анти-удаление</b> — пересылка удалённых и изменённых сообщений собеседника\n"
-        "• 🔥 <b>Сгорающие фото</b> — сохранение медиа до их исчезновения по таймеру\n"
+        "• 📸 <b>Спасённые фото</b> — сохранение полученных фото и медиа в галерею\n"
         "• ⌨️ <b>Авто-раскладка</b> — исправление раскладки (<i>ghbdtn ➔ привет</i>)\n"
         "• ⏰ <b>Встречи</b> — авто-напоминания о встречах за 1 час и за 30 минут\n"
-        "• 🌐 <b>Поиск</b> — напишите <code>!инфо запрос</code> для быстрой справки из сети\n"
         "• ⭐ <b>Избранное</b> — сохранение любого сообщения по реакции ⭐ или ответу ⭐\n"
-        "• 🔍 <b>Поиск</b> — быстрый поиск любых сообщений по диалогам\n"
         "• 📊 <b>Статистика</b> — подсчёт активности и сообщений"
     )
     kb = InlineKeyboardMarkup([
@@ -738,40 +710,7 @@ async def send_stats(target, user_id: int, is_edit: bool = False):
     await target.reply_text(text, reply_markup=kb, parse_mode="HTML")
 
 
-async def perform_search(target_msg, user_id: int, query_text: str):
-    query_text = query_text.strip()
-    if not query_text:
-        kb = InlineKeyboardMarkup([
-            [InlineKeyboardButton("🔍 Искать снова", callback_data="search")],
-            [InlineKeyboardButton("« В главное меню", callback_data="main_menu")],
-        ])
-        await target_msg.reply_text(
-            "⚠️ Введите слово или фразу для поиска:",
-            reply_markup=kb,
-            parse_mode="HTML",
-        )
-        return
 
-    esc_query = html.escape(query_text)
-    results = storage.search_messages(user_id, query_text, limit=6)
-    if not results:
-        text = f"🔍 По запросу «<b>{esc_query}</b>» ничего не найдено."
-    else:
-        text = f"🔍 <b>Результаты поиска</b> «<b>{esc_query}</b>» ({len(results)}):\n\n"
-        for i, r in enumerate(results, 1):
-            dt = datetime.fromtimestamp(r["date"], tz=timezone.utc).astimezone().strftime("%d.%m %H:%M")
-            author = r["from_user_name"] or ("Вы" if r["is_owner"] == 1 else "Собеседник")
-            chat_name = r["chat_title"] or str(r["chat_id"])
-            body = (r["text"] or "").strip()
-            if len(body) > 100:
-                body = body[:97] + "..."
-            text += f"{i}. <b>{html.escape(chat_name)}</b> ({html.escape(author)}, {dt}):\n<i>«{html.escape(body)}»</i>\n\n"
-
-    kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("🔍 Искать ещё", callback_data="search")],
-        [InlineKeyboardButton("« В главное меню", callback_data="main_menu")],
-    ])
-    await target_msg.reply_text(text, reply_markup=kb, parse_mode="HTML")
 
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -836,22 +775,6 @@ async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await send_stats(update.message, user_id, is_edit=False)
 
 
-async def search_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id if update.effective_user else 0
-    args = context.args
-    if args:
-        query_text = " ".join(args)
-        await perform_search(update.message, user_id, query_text)
-    else:
-        context.user_data["awaiting_search"] = True
-        text = (
-            "🔍 <b>Поиск по диалогам</b>\n\n"
-            "Отправьте слово или фразу для поиска:"
-        )
-        kb = InlineKeyboardMarkup([
-            [InlineKeyboardButton("« В главное меню", callback_data="main_menu")]
-        ])
-        await update.message.reply_text(text, reply_markup=kb, parse_mode="HTML")
 
 
 async def send_reminders_list(target, user_id: int, is_edit: bool = False):
@@ -1479,18 +1402,7 @@ async def on_private_message(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     user_id = update.effective_user.id if update.effective_user else 0
 
-    # Проверка на веб-поиск фактов (!инфо, !поиск, !гугл, !факт)
-    is_search, search_query = websearch.extract_search_query(msg.text)
-    if is_search and search_query:
-        loop = asyncio.get_running_loop()
-        fact_text = await loop.run_in_executor(None, websearch.get_fact_response, search_query)
-        await msg.reply_text(fact_text, parse_mode="HTML")
-        return
 
-    if context.user_data.get("awaiting_search"):
-        context.user_data["awaiting_search"] = False
-        await perform_search(msg, user_id, msg.text)
-        return
 
     if context.user_data.get("awaiting_export_chat_query"):
         context.user_data["awaiting_export_chat_query"] = False
@@ -1639,21 +1551,7 @@ async def on_callback_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif query.data == "media_list":
         await query.answer()
         await send_media_list(query.message, user_id, is_edit=True)
-    elif query.data == "search":
-        await query.answer()
-        context.user_data["awaiting_search"] = True
-        context.user_data["awaiting_admin_chat_query"] = False
-        text = (
-            "🔍 <b>Поиск по диалогам</b>\n\n"
-            "Отправьте слово или фразу для поиска:"
-        )
-        kb = InlineKeyboardMarkup([
-            [InlineKeyboardButton("« В главное меню", callback_data="main_menu")]
-        ])
-        try:
-            await query.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
-        except Exception:
-            await query.message.reply_text(text, reply_markup=kb, parse_mode="HTML")
+
     elif query.data == "help":
         await query.answer()
         await send_help(update, context)
@@ -2012,7 +1910,6 @@ def main():
     app.add_handler(CommandHandler("start", start_command))
     app.add_handler(CommandHandler("settings", settings_command))
     app.add_handler(CommandHandler("stats", stats_command))
-    app.add_handler(CommandHandler("search", search_command))
     app.add_handler(CommandHandler("reminders", reminders_command))
     app.add_handler(CommandHandler("starred", starred_command))
     app.add_handler(CommandHandler("favorites", starred_command))
