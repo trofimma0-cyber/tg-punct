@@ -1894,13 +1894,14 @@ def main():
         """Периодически пингует внешний адрес сервиса на Render, чтобы контейнер не засыпал."""
         render_url = os.getenv("RENDER_EXTERNAL_URL", "https://tg-punct-bot.onrender.com").rstrip("/") + "/health"
         while True:
-            await asyncio.sleep(480)  # каждые 8 минут
+            await asyncio.sleep(300)  # каждые 5 минут (Render засыпает через 15 минут)
             try:
-                async with httpx.AsyncClient(timeout=15.0) as client:
-                    r = await client.get(render_url)
-                    logger.info("Keep-alive self-ping %s: %s", render_url, r.status_code)
+                from aiohttp import ClientSession
+                async with ClientSession() as session:
+                    async with session.get(render_url, timeout=15) as resp:
+                        logger.info("Keep-alive ping %s: %s", render_url, resp.status)
             except Exception as e:
-                logger.debug("Keep-alive self-ping error: %s", e)
+                logger.debug("Keep-alive ping error: %s", e)
 
     async def post_init(application: Application):
         await start_web_server()
